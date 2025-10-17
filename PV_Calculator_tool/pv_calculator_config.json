@@ -1,0 +1,34 @@
+{
+    "tariff": {
+        "power_amperes": "16",
+        "power_cost": "0.82",
+        "electricity_cost": "0.06",
+        "transfer_cost": "0.04",
+        "service_cost": "0.02",
+        "monthly_service_fee": "0.83",
+        "vat_rate": "21"
+    },
+    "consumption": {
+        "monthly_consumption": "250"
+    },
+    "pv": {
+        "enabled": true,
+        "size": "12",
+        "cost": "2200",
+        "irradiance": "2.5"
+    },
+    "battery": {
+        "enabled": true,
+        "capacity": "14",
+        "cost": "2300"
+    },
+    "nordpool": {
+        "price": "0.03"
+    },
+    "ev": {
+        "enabled": true,
+        "daily_km": "80",
+        "efficiency": "20",
+        "charger_power": "11"
+    }
+}
