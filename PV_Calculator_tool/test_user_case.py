@@ -5,7 +5,7 @@ This should show POSITIVE savings and reasonable payback period
 
 from PV_calculator import (
     ElectricityTariff, ConsumptionProfile, PVSystemSpecs, 
-    BatterySpecs, NordPoolPrices, EVProfile, PVFeasibilityCalculator
+    BatterySpecs, NordPoolPrice, EVProfile, PVFeasibilityCalculator
 )
 
 def main():
@@ -30,12 +30,12 @@ def main():
     # Total with 21% VAT ≈ €0.145/kWh
     
     tariff = ElectricityTariff(
-        power_ampere=25,
+        power_amperes=25,
         power_cost_per_ampere=0.50,      # €0.50/A/month
-        electricity_cost_per_kwh=0.06,   # €0.06/kWh
-        transfer_cost_per_kwh=0.04,      # €0.04/kWh
-        service_cost_per_kwh=0.01,       # €0.01/kWh
-        monthly_service_cost=17.0,       # €17/month
+        electricity_cost=0.06,           # €0.06/kWh
+        transfer_cost=0.04,              # €0.04/kWh
+        service_cost=0.01,               # €0.01/kWh
+        monthly_service_fee=17.0,        # €17/month
         vat_rate=0.21                    # 21%
     )
     
@@ -59,23 +59,23 @@ def main():
     
     # User's PV system
     pv_system = PVSystemSpecs(
-        size_kwp=12.0,
+        peak_power_kw=12.0,
         installation_cost=2200.0,
-        efficiency=0.85,
-        degradation_rate=0.005
+        system_efficiency=0.85,
+        annual_degradation_rate=0.005
     )
     
     # User's battery
     battery = BatterySpecs(
         capacity_kwh=14.0,
-        cost=2300.0,
+        installation_cost=2300.0,
         efficiency=0.95,
         depth_of_discharge=0.9,
         lifetime_years=10
     )
     
     # Nord Pool prices
-    nord_pool = NordPoolPrices(
+    nord_pool = NordPoolPrice(
         average_price=0.06  # €0.06/kWh
     )
     
@@ -85,7 +85,7 @@ def main():
     print(f"Household: {consumption.monthly_consumption_kwh} kWh/month = {consumption.get_annual_consumption()} kWh/year")
     print(f"EV: {ev_profile.daily_driving_kwh} kWh/day = {ev_profile.daily_driving_kwh * 365:.0f} kWh/year")
     print(f"Total consumption: {consumption.get_annual_consumption() + ev_profile.daily_driving_kwh * 365:.0f} kWh/year")
-    print(f"PV System: {pv_system.size_kwp} kWp → ~{pv_system.estimate_annual_production():.0f} kWh/year")
+    print(f"PV System: {pv_system.peak_power_kw} kWp → ~{pv_system.estimate_annual_production():.0f} kWh/year")
     print(f"Battery: {battery.capacity_kwh} kWh")
     print()
     
@@ -121,11 +121,11 @@ def main():
     print("WITH PV ONLY (NO BATTERY)")
     print("=" * 80)
     print(f"Annual cost: €{pv_only['annual_cost']:.2f}")
-    print(f"Grid import: {pv_only['grid_import_kwh']:.0f} kWh")
-    print(f"  - Household: {pv_only['grid_import_household_kwh']:.0f} kWh")
-    print(f"  - EV: {pv_only['grid_import_ev_kwh']:.0f} kWh")
-    print(f"Excess to grid: {pv_only['excess_to_grid_kwh']:.0f} kWh")
-    print(f"Revenue: €{pv_only['revenue_from_excess']:.2f}")
+    print(f"Grid import: {pv_only['annual_grid_import']:.0f} kWh")
+    print(f"  - Household: {pv_only['annual_grid_import_household']:.0f} kWh")
+    print(f"  - EV: {pv_only['annual_grid_import_ev']:.0f} kWh")
+    print(f"Excess to grid: {pv_only['annual_excess_to_grid']:.0f} kWh")
+    print(f"Revenue: €{pv_only['annual_revenue']:.2f}")
     print()
     print(f"💰 SAVINGS: €{baseline['annual_cost'] - pv_only['annual_cost']:.2f}/year")
     if baseline['annual_cost'] > pv_only['annual_cost']:
@@ -148,16 +148,16 @@ def main():
     print("WITH PV + BATTERY")
     print("=" * 80)
     print(f"Annual cost: €{pv_battery['annual_cost']:.2f}")
-    print(f"Grid import: {pv_battery['grid_import_kwh']:.0f} kWh")
-    print(f"  - Household: {pv_battery['grid_import_household_kwh']:.0f} kWh")
-    print(f"  - EV: {pv_battery['grid_import_ev_kwh']:.0f} kWh")
-    print(f"Excess to grid: {pv_battery['excess_to_grid_kwh']:.0f} kWh")
-    print(f"Revenue: €{pv_battery['revenue_from_excess']:.2f}")
+    print(f"Grid import: {pv_battery['annual_grid_import']:.0f} kWh")
+    print(f"  - Household: {pv_battery['annual_grid_import_household']:.0f} kWh")
+    print(f"  - EV: {pv_battery['annual_grid_import_ev']:.0f} kWh")
+    print(f"Excess to grid: {pv_battery['annual_excess_to_grid']:.0f} kWh")
+    print(f"Revenue: €{pv_battery['annual_revenue']:.2f}")
     print(f"Self-sufficiency: {pv_battery['total_self_sufficiency_ratio']:.1%}")
     print()
     print(f"💰 SAVINGS: €{baseline['annual_cost'] - pv_battery['annual_cost']:.2f}/year")
     if baseline['annual_cost'] > pv_battery['annual_cost']:
-        total_investment = pv_system.installation_cost + battery.cost
+        total_investment = pv_system.installation_cost + battery.installation_cost
         payback = total_investment / (baseline['annual_cost'] - pv_battery['annual_cost'])
         print(f"⏱️  PAYBACK: {payback:.1f} years (€{total_investment:.0f} investment)")
         if payback < 7:

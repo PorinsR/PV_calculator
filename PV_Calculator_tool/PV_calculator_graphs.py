@@ -6,6 +6,7 @@ Generates visualization of break-even analysis and financial projections
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
+import math
 from typing import Dict, List, Optional, Tuple
 from PV_calculator import PVFeasibilityCalculator
 
@@ -768,6 +769,308 @@ class PVGraphGenerator:
                 fontsize=10, verticalalignment='top', horizontalalignment='right',
                 bbox=dict(boxstyle='round,pad=0.8', facecolor='white', alpha=0.95, edgecolor='gray'),
                 fontweight='bold')
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Graph saved to: {save_path}")
+        
+        if show:
+            plt.show()
+        
+        return fig
+    
+    def plot_weekly_energy_balance(self, week_number: int = 1, with_battery: bool = True, 
+                                   save_path: Optional[str] = None, show: bool = True) -> plt.Figure:
+        """
+        Plot hourly energy balance for a specific week of the year
+        Shows PV generation, consumption, and net balance
+        
+        Args:
+            week_number: Week of year (1-52)
+            with_battery: Whether to include battery in simulation
+            save_path: Path to save the figure
+            show: Whether to display the figure
+        """
+        if not self.calculator.pv_system:
+            raise ValueError("PV system must be configured to generate weekly analysis")
+        
+        # Calculate which month and starting day
+        # Approximate: week 1 = Jan 1-7, week 2 = Jan 8-14, etc.
+        days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        
+        # Find the month and day for the start of this week
+        start_day_of_year = (week_number - 1) * 7 + 1
+        
+        current_day = 0
+        start_month = 1
+        start_day = 1
+        
+        for month_idx, days in enumerate(days_in_month):
+            if current_day + days >= start_day_of_year:
+                start_month = month_idx + 1
+                start_day = start_day_of_year - current_day
+                break
+            current_day += days
+        
+        # Determine starting day of week (assume Jan 1 = Monday)
+        start_day_of_week = (start_day_of_year - 1) % 7
+        
+        # Day names
+        day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+        
+        # Simulate each day of the week
+        hours = []
+        pv_generation = []
+        consumption = []
+        battery_charge_list = []
+        battery_discharge_list = []
+        battery_state_list = []
+        net_balance = []
+        
+        current_month = start_month
+        current_day_in_month = start_day
+        day_of_week = start_day_of_week
+        
+        for day in range(7):
+            # Check if we need to move to next month
+            if current_day_in_month > days_in_month[current_month - 1]:
+                current_month += 1
+                current_day_in_month = 1
+                if current_month > 12:
+                    current_month = 1
+            
+            # Get PV pattern for this month
+            pv_pattern = self.calculator.pv_system.get_hourly_pv_pattern(current_month)
+            daily_pv = self.calculator.pv_system.estimate_daily_production(month=current_month)
+            
+            # Simulate this day
+            battery_state = 0
+            battery_capacity = (self.calculator.battery.get_usable_capacity() 
+                              if (with_battery and self.calculator.battery) else 0)
+            
+            # Track EV charging for realistic behavior (charge at full power until done)
+            ev_energy_needed_today = 0
+            ev_energy_charged_today = 0
+            if self.calculator.ev_profile.enabled:
+                # Calculate today's EV energy need with seasonal adjustment
+                seasonal_factor = 1.0 - 0.2 * math.cos((current_month - 1) * math.pi / 6)
+                ev_energy_needed_today = self.calculator.ev_profile.daily_driving_kwh * seasonal_factor
+            
+            for hour in range(24):
+                hour_of_week = day * 24 + hour
+                hours.append(hour_of_week)
+                
+                # PV generation
+                pv_hour = daily_pv * pv_pattern[hour]
+                pv_generation.append(pv_hour)
+                
+                # Household consumption (day-of-week aware)
+                consumption_hour = self.calculator.consumption.get_hourly_consumption(
+                    hour, current_month, day_of_week
+                )
+                
+                # Add EV consumption if enabled (realistic: charge at full charger power until done)
+                if self.calculator.ev_profile.enabled:
+                    # Check if this is a charging hour and EV still needs charge
+                    if hour in self.calculator.ev_profile.charging_hours and ev_energy_charged_today < ev_energy_needed_today:
+                        # Charge at full charger power until daily need is met
+                        remaining_energy = ev_energy_needed_today - ev_energy_charged_today
+                        ev_charge_this_hour = min(self.calculator.ev_profile.charging_power_kw, remaining_energy)
+                        consumption_hour += ev_charge_this_hour
+                        ev_energy_charged_today += ev_charge_this_hour
+                
+                consumption.append(consumption_hour)
+                
+                # Battery simulation
+                battery_charge = 0
+                battery_discharge = 0
+                balance = pv_hour - consumption_hour
+                
+                if with_battery and self.calculator.battery:
+                    if balance > 0:  # Excess PV
+                        # Try to charge battery
+                        charge_amount = min(balance, battery_capacity - battery_state)
+                        charge_actual = charge_amount * self.calculator.battery.efficiency
+                        battery_state += charge_actual
+                        battery_charge = charge_actual
+                        balance -= charge_amount
+                    else:  # Deficit
+                        # Try to discharge battery
+                        deficit = -balance
+                        discharge_amount = min(deficit, battery_state)
+                        discharge_actual = discharge_amount * self.calculator.battery.efficiency
+                        battery_state -= discharge_amount
+                        battery_discharge = discharge_actual
+                        balance += discharge_actual
+                
+                battery_charge_list.append(battery_charge)
+                battery_discharge_list.append(battery_discharge)
+                battery_state_list.append(battery_state)
+                net_balance.append(balance)
+            
+            day_of_week = (day_of_week + 1) % 7
+            current_day_in_month += 1
+        
+        # Create figure
+        fig = plt.figure(figsize=(16, 10))
+        gs = fig.add_gridspec(3, 1, height_ratios=[2, 1.5, 1], hspace=0.3)
+        
+        ax1 = fig.add_subplot(gs[0])
+        ax2 = fig.add_subplot(gs[1], sharex=ax1)
+        ax3 = fig.add_subplot(gs[2])  # Independent x-axis for day summary
+        
+        # Determine month name for title
+        month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        title_month = month_names[start_month - 1]
+        
+        fig.suptitle(f'Weekly Energy Balance - Week {week_number} ({title_month} {start_day})', 
+                    fontsize=16, fontweight='bold')
+        
+        # Plot 1: PV Generation vs Consumption
+        ax1.fill_between(hours, 0, pv_generation, alpha=0.3, color='orange', label='PV Generation')
+        ax1.plot(hours, pv_generation, color='orange', linewidth=2, label='PV Generation (kW)')
+        ax1.fill_between(hours, 0, consumption, alpha=0.3, color='red', label='Consumption')
+        ax1.plot(hours, consumption, color='red', linewidth=2, label='Total Consumption (kW)')
+        
+        ax1.set_ylabel('Power (kW)', fontsize=11, fontweight='bold')
+        ax1.set_title('Hourly PV Generation vs Consumption', fontsize=12, fontweight='bold')
+        ax1.legend(loc='upper right', fontsize=10)
+        ax1.grid(True, alpha=0.3)
+        ax1.set_xlim(0, 168)  # Exactly 7 days × 24 hours
+        
+        # Set x-axis ticks at day boundaries
+        ax1.set_xticks([0, 24, 48, 72, 96, 120, 144, 168])
+        ax1.set_xticklabels(['Mon\n0h', '24h', '48h', '72h', '96h', '120h', '144h', 'Sun\n168h'], fontsize=9)
+        
+        # Add vertical lines for days
+        for day in range(1, 8):
+            ax1.axvline(x=day*24, color='gray', linestyle='--', alpha=0.5)
+        
+        # Add day labels
+        for day in range(7):
+            day_name = day_names[(start_day_of_week + day) % 7]
+            is_weekend = ((start_day_of_week + day) % 7) in [5, 6]
+            color = 'darkblue' if is_weekend else 'black'
+            weight = 'bold' if is_weekend else 'normal'
+            ax1.text(day*24 + 12, ax1.get_ylim()[1] * 0.95, day_name,
+                    ha='center', va='top', fontsize=11, fontweight=weight, color=color,
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7))
+        
+        # Plot 2: Net Balance with Battery
+        positive_balance = [max(0, b) for b in net_balance]
+        negative_balance = [min(0, b) for b in net_balance]
+        
+        ax2.fill_between(hours, 0, positive_balance, alpha=0.5, color='green', label='Excess (to grid)')
+        ax2.fill_between(hours, 0, negative_balance, alpha=0.5, color='red', label='Deficit (from grid)')
+        ax2.plot(hours, net_balance, color='black', linewidth=1.5, label='Net Balance', alpha=0.7)
+        ax2.axhline(y=0, color='gray', linestyle='-', linewidth=1)
+        
+        if with_battery and self.calculator.battery:
+            # Add battery state on secondary axis
+            ax2_twin = ax2.twinx()
+            ax2_twin.plot(hours, battery_state_list, color='blue', linewidth=2, 
+                         linestyle='--', label='Battery State', alpha=0.7)
+            ax2_twin.set_ylabel('Battery State (kWh)', fontsize=11, fontweight='bold', color='blue')
+            ax2_twin.tick_params(axis='y', labelcolor='blue')
+            ax2_twin.set_ylim([0, battery_capacity * 1.1])
+            
+            # Combined legend
+            lines1, labels1 = ax2.get_legend_handles_labels()
+            lines2, labels2 = ax2_twin.get_legend_handles_labels()
+            ax2.legend(lines1 + lines2, labels1 + labels2, loc='upper right', fontsize=10)
+        else:
+            ax2.legend(loc='upper right', fontsize=10)
+        
+        ax2.set_ylabel('Net Power (kW)', fontsize=11, fontweight='bold')
+        ax2.set_title('Net Energy Balance (Positive=Export, Negative=Import)', fontsize=12, fontweight='bold')
+        ax2.grid(True, alpha=0.3)
+        ax2.set_xlim(0, 168)  # Exactly 7 days × 24 hours
+        ax2.set_xlabel('Hour of Week', fontsize=11, fontweight='bold')
+        
+        # Set x-axis ticks at day boundaries (matching ax1)
+        ax2.set_xticks([0, 24, 48, 72, 96, 120, 144, 168])
+        ax2.set_xticklabels(['0h', '24h', '48h', '72h', '96h', '120h', '144h', '168h'], fontsize=9)
+        
+        # Add vertical lines for days
+        for day in range(1, 8):
+            ax2.axvline(x=day*24, color='gray', linestyle='--', alpha=0.5)
+        
+        # Plot 3: Daily Energy Summary
+        daily_pv = []
+        daily_consumption = []
+        daily_export = []
+        daily_import = []
+        day_labels = []
+        
+        for day in range(7):
+            start_h = day * 24
+            end_h = (day + 1) * 24
+            
+            day_pv = sum(pv_generation[start_h:end_h])
+            day_cons = sum(consumption[start_h:end_h])
+            day_export = sum([max(0, b) for b in net_balance[start_h:end_h]])
+            day_import = sum([abs(min(0, b)) for b in net_balance[start_h:end_h]])
+            
+            daily_pv.append(day_pv)
+            daily_consumption.append(day_cons)
+            daily_export.append(day_export)
+            daily_import.append(day_import)
+            
+            day_name = day_names[(start_day_of_week + day) % 7]
+            day_labels.append(day_name)
+        
+        x_pos = np.arange(7)
+        width = 0.25
+        
+        bars1 = ax3.bar(x_pos - width*1.5, daily_pv, width, label='PV Generated', 
+                       color='orange', alpha=0.8)
+        bars2 = ax3.bar(x_pos - width/2, daily_consumption, width, label='Consumed', 
+                       color='red', alpha=0.8)
+        bars3 = ax3.bar(x_pos + width/2, daily_export, width, label='Exported', 
+                       color='green', alpha=0.8)
+        bars4 = ax3.bar(x_pos + width*1.5, daily_import, width, label='Imported', 
+                       color='darkred', alpha=0.8)
+        
+        ax3.set_ylabel('Energy (kWh)', fontsize=11, fontweight='bold')
+        ax3.set_title('Daily Energy Summary', fontsize=12, fontweight='bold')
+        ax3.set_xticks(x_pos)
+        ax3.set_xticklabels(day_labels, fontsize=10)
+        ax3.legend(loc='upper right', fontsize=9, ncol=4)
+        ax3.grid(True, alpha=0.3, axis='y')
+        
+        # Fix x-axis limits to prevent bars from being cut off
+        ax3.set_xlim(-0.6, 6.6)
+        
+        # Highlight weekends
+        for day in range(7):
+            if ((start_day_of_week + day) % 7) in [5, 6]:
+                ax3.axvspan(day-0.5, day+0.5, alpha=0.1, color='blue')
+        
+        # Add summary statistics
+        week_pv_total = sum(daily_pv)
+        week_cons_total = sum(daily_consumption)
+        week_export_total = sum(daily_export)
+        week_import_total = sum(daily_import)
+        self_sufficiency = ((week_cons_total - week_import_total) / week_cons_total * 100 
+                           if week_cons_total > 0 else 0)
+        
+        summary_text = f'Week Summary:\n'
+        summary_text += f'PV: {week_pv_total:.1f} kWh\n'
+        summary_text += f'Consumed: {week_cons_total:.1f} kWh\n'
+        summary_text += f'Exported: {week_export_total:.1f} kWh\n'
+        summary_text += f'Imported: {week_import_total:.1f} kWh\n'
+        summary_text += f'Self-Sufficiency: {self_sufficiency:.1f}%'
+        
+        ax3.text(0.98, 0.97, summary_text, transform=ax3.transAxes,
+                fontsize=9, verticalalignment='top', horizontalalignment='right',
+                bbox=dict(boxstyle='round,pad=0.5', facecolor='lightyellow', alpha=0.95, 
+                         edgecolor='orange', linewidth=2),
+                fontweight='bold', family='monospace')
+        
+        ax3.set_xlabel('Day of Week', fontsize=11, fontweight='bold')
         
         plt.tight_layout()
         

@@ -1,0 +1,38 @@
+{
+    "tariff": {
+        "power_amperes": "16",
+        "power_cost": "0.82",
+        "electricity_cost": "0.10379",
+        "transfer_cost": "0.03962",
+        "service_cost": "0.01650",
+        "monthly_service_fee": "0.83",
+        "vat_rate": "21"
+    },
+    "consumption": {
+        "monthly_consumption": "250"
+    },
+    "pv": {
+        "enabled": true,
+        "size": "11.2",
+        "cost": "2500",
+        "location": "riga_latvia"
+    },
+    "battery": {
+        "enabled": true,
+        "capacity": "14",
+        "cost": "2000"
+    },
+    "nordpool": {
+        "price": "0.01"
+    },
+    "ev": {
+        "enabled": true,
+        "make": "Hyundai",
+        "model": "IONIQ 5",
+        "configuration": "Long Range AWD (2024, 72 kWh)",
+        "consumption": "17.5",
+        "weekly_km": "350.0",
+        "charger_power": "11",
+        "charging_start": 18
+    }
+}

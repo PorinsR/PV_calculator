@@ -104,6 +104,64 @@ class PVSystemSpecs:
         days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
         daily = self.estimate_daily_production(year, month)
         return daily * days_in_month[month - 1]
+    
+    def get_hourly_pv_pattern(self, month: int = 6) -> List[float]:
+        """
+        Get hourly PV production pattern for a specific month (0-1 normalized per hour)
+        Accounts for seasonal daylight hours
+        
+        Args:
+            month: Month of year (1-12)
+        
+        Returns:
+            List of 24 hourly fractions that sum to 1.0
+        """
+        # Define sunrise and sunset hours for each month (approximate for Central Europe)
+        # Format: (sunrise_hour, sunset_hour) as floats
+        daylight_hours = [
+            (8.0, 16.5),   # January (8:00 AM - 4:30 PM)
+            (7.5, 17.5),   # February (7:30 AM - 5:30 PM)
+            (6.5, 18.5),   # March (6:30 AM - 6:30 PM)
+            (6.0, 20.0),   # April (6:00 AM - 8:00 PM, DST starts)
+            (5.5, 20.5),   # May (5:30 AM - 8:30 PM)
+            (5.0, 21.5),   # June (5:00 AM - 9:30 PM)
+            (5.0, 21.0),   # July (5:00 AM - 9:00 PM)
+            (5.5, 20.5),   # August (5:30 AM - 8:30 PM)
+            (6.5, 19.0),   # September (6:30 AM - 7:00 PM)
+            (7.0, 18.0),   # October (7:00 AM - 6:00 PM, DST ends)
+            (7.5, 16.5),   # November (7:30 AM - 4:30 PM)
+            (8.0, 16.0),   # December (8:00 AM - 4:00 PM)
+        ]
+        
+        sunrise, sunset = daylight_hours[month - 1]
+        solar_noon = (sunrise + sunset) / 2.0
+        day_length = sunset - sunrise
+        
+        # Generate hourly pattern with bell curve during daylight hours
+        pattern = []
+        for hour in range(24):
+            if hour < sunrise - 0.5 or hour > sunset + 0.5:
+                # No production outside daylight hours
+                pattern.append(0.0)
+            else:
+                # Bell curve centered at solar noon
+                # Peak at noon, tapering to sunrise/sunset
+                relative_hour = hour - solar_noon
+                # Use cosine curve for smooth distribution
+                normalized_position = relative_hour / (day_length / 2.0)
+                if abs(normalized_position) > 1.0:
+                    pattern.append(0.0)
+                else:
+                    # Cosine gives nice bell curve: max at 0, zero at ±1
+                    production = math.cos(normalized_position * math.pi / 2.0) ** 2
+                    pattern.append(production)
+        
+        # Normalize so sum = 1.0
+        total = sum(pattern)
+        if total > 0:
+            pattern = [p / total for p in pattern]
+        
+        return pattern
 
 
 @dataclass
@@ -164,6 +222,54 @@ class ConsumptionProfile:
         0.06, 0.08, 0.08, 0.07, 0.05, 0.04   # 18:00-23:59 (evening peak)
     ])
     
+    # Weekly consumption profiles (7 days: Monday=0, Sunday=6)
+    # Each profile is a multiplier on the base hourly pattern
+    # Weekdays (Mon-Fri): Typical work-from-home or away pattern
+    # Weekends: More at-home consumption, shifted to later hours
+    weekly_profiles: List[List[float]] = field(default_factory=lambda: [
+        # Monday - typical weekday
+        [0.90, 0.80, 0.80, 0.80, 0.85, 0.90,  # 00:00-05:59 (night, low)
+         0.95, 1.00, 0.85, 0.75, 0.70, 0.70,  # 06:00-11:59 (morning rush then away)
+         0.70, 0.70, 0.75, 0.80, 0.90, 1.05,  # 12:00-17:59 (afternoon, returning)
+         1.20, 1.15, 1.10, 1.05, 1.00, 0.95], # 18:00-23:59 (evening peak)
+        
+        # Tuesday - typical weekday
+        [0.90, 0.80, 0.80, 0.80, 0.85, 0.90,  
+         0.95, 1.00, 0.85, 0.75, 0.70, 0.70,  
+         0.70, 0.70, 0.75, 0.80, 0.90, 1.05,  
+         1.20, 1.15, 1.10, 1.05, 1.00, 0.95],
+        
+        # Wednesday - typical weekday
+        [0.90, 0.80, 0.80, 0.80, 0.85, 0.90,  
+         0.95, 1.00, 0.85, 0.75, 0.70, 0.70,  
+         0.70, 0.70, 0.75, 0.80, 0.90, 1.05,  
+         1.20, 1.15, 1.10, 1.05, 1.00, 0.95],
+        
+        # Thursday - typical weekday
+        [0.90, 0.80, 0.80, 0.80, 0.85, 0.90,  
+         0.95, 1.00, 0.85, 0.75, 0.70, 0.70,  
+         0.70, 0.70, 0.75, 0.80, 0.90, 1.05,  
+         1.20, 1.15, 1.10, 1.05, 1.00, 0.95],
+        
+        # Friday - weekday with slightly higher evening
+        [0.90, 0.80, 0.80, 0.80, 0.85, 0.90,  
+         0.95, 1.00, 0.85, 0.75, 0.70, 0.70,  
+         0.70, 0.75, 0.80, 0.85, 0.95, 1.10,  
+         1.25, 1.20, 1.15, 1.10, 1.05, 0.95],  # Higher evening usage
+        
+        # Saturday - weekend, more daytime at-home
+        [1.00, 0.95, 0.95, 0.95, 0.95, 1.00,  # Sleep in
+         1.05, 1.10, 1.15, 1.10, 1.05, 1.00,  # Morning at home (breakfast, etc)
+         1.00, 1.00, 1.05, 1.05, 1.05, 1.05,  # Afternoon activities
+         1.10, 1.10, 1.05, 1.00, 0.95, 0.95], # Evening
+        
+        # Sunday - weekend, highest daytime consumption
+        [1.05, 1.00, 1.00, 1.00, 1.00, 1.05,  
+         1.10, 1.15, 1.20, 1.15, 1.10, 1.05,  # Cooking, cleaning, laundry
+         1.05, 1.05, 1.10, 1.10, 1.10, 1.05,  
+         1.05, 1.05, 1.00, 0.95, 0.90, 0.95]  # Preparing for week
+    ])
+    
     # Monthly variation factors (1.0 = average month)
     # Default assumes higher consumption in winter (heating) and summer (cooling)
     monthly_factors: List[float] = field(default_factory=lambda: [
@@ -181,12 +287,24 @@ class ConsumptionProfile:
         1.2    # December (winter heating)
     ])
     
-    def get_daily_consumption(self, month: int = None) -> float:
-        """Get daily consumption in kWh for a specific month"""
+    def get_daily_consumption(self, month: int = None, day_of_week: int = None) -> float:
+        """
+        Get daily consumption in kWh for a specific month and day of week
+        
+        Args:
+            month: Month of year (1-12)
+            day_of_week: Day of week (0=Monday, 6=Sunday)
+        """
         base_daily = self.monthly_consumption_kwh / 30
         
+        # Apply monthly seasonal factor
         if month is not None and 1 <= month <= 12:
-            return base_daily * self.monthly_factors[month - 1]
+            base_daily *= self.monthly_factors[month - 1]
+        
+        # Apply day-of-week factor (average of all hourly multipliers for that day)
+        if day_of_week is not None and 0 <= day_of_week <= 6:
+            day_factor = sum(self.weekly_profiles[day_of_week]) / 24.0
+            base_daily *= day_factor
         
         return base_daily
     
@@ -194,10 +312,30 @@ class ConsumptionProfile:
         """Get annual consumption in kWh"""
         return self.monthly_consumption_kwh * 12
     
-    def get_hourly_consumption(self, hour: int, month: int = None) -> float:
-        """Get consumption for a specific hour"""
-        daily = self.get_daily_consumption(month)
-        return daily * self.hourly_pattern[hour % 24]
+    def get_hourly_consumption(self, hour: int, month: int = None, day_of_week: int = None) -> float:
+        """
+        Get consumption for a specific hour, considering month and day of week
+        
+        Args:
+            hour: Hour of day (0-23)
+            month: Month of year (1-12)
+            day_of_week: Day of week (0=Monday, 6=Sunday)
+        """
+        # Get base daily consumption
+        base_daily = self.monthly_consumption_kwh / 30
+        
+        # Apply monthly seasonal factor
+        if month is not None and 1 <= month <= 12:
+            base_daily *= self.monthly_factors[month - 1]
+        
+        # Apply base hourly pattern
+        hourly_consumption = base_daily * self.hourly_pattern[hour % 24]
+        
+        # Apply day-of-week multiplier
+        if day_of_week is not None and 0 <= day_of_week <= 6:
+            hourly_consumption *= self.weekly_profiles[day_of_week][hour % 24]
+        
+        return hourly_consumption
 
 
 @dataclass
@@ -284,29 +422,24 @@ class PVFeasibilityCalculator:
             'ev_annual_cost': ev_annual_cost
         }
     
-    def simulate_daily_energy_flow(self, with_battery: bool = False, month: int = 6) -> Dict:
+    def simulate_daily_energy_flow(self, with_battery: bool = False, month: int = 6, day_of_week: int = 3) -> Dict:
         """
-        Simulate energy flow for an average day in a specific month
+        Simulate energy flow for a specific day
         Returns: consumption from grid, PV self-consumption, excess to grid, battery usage, EV charging
         
         Args:
             with_battery: Whether to include battery storage
             month: Month of year (1-12) for seasonal calculations
+            day_of_week: Day of week (0=Monday, 6=Sunday)
         """
         if not self.pv_system:
             return None
         
-        daily_consumption = self.consumption.get_daily_consumption(month)
+        daily_consumption = self.consumption.get_daily_consumption(month, day_of_week)
         daily_pv_production = self.pv_system.estimate_daily_production(month=month)
         
-        # Simplified hourly simulation
-        # PV production pattern (0 at night, peak at noon)
-        pv_hourly_pattern = [
-            0, 0, 0, 0, 0, 0,  # 00:00-05:59
-            0.02, 0.05, 0.08, 0.10, 0.12, 0.13,  # 06:00-11:59
-            0.14, 0.13, 0.12, 0.10, 0.06, 0.03,  # 12:00-17:59
-            0.01, 0, 0, 0, 0, 0  # 18:00-23:59
-        ]
+        # Get season-aware PV production pattern
+        pv_hourly_pattern = self.pv_system.get_hourly_pv_pattern(month)
         
         grid_import_household = 0
         grid_import_ev = 0
@@ -320,8 +453,8 @@ class PVFeasibilityCalculator:
         battery_capacity = self.battery.get_usable_capacity() if (with_battery and self.battery) else 0
         
         for hour in range(24):
-            # Household consumption (not including EV)
-            household_consumption = self.consumption.get_hourly_consumption(hour, month)
+            # Household consumption (not including EV) - now day-of-week aware
+            household_consumption = self.consumption.get_hourly_consumption(hour, month, day_of_week)
             
             # EV charging (separate tracking)
             ev_consumption = self.ev_profile.get_hourly_ev_consumption(hour, month)
@@ -398,11 +531,12 @@ class PVFeasibilityCalculator:
         }
     
     def calculate_annual_costs_with_pv(self, with_battery: bool = False) -> Dict:
-        """Calculate annual costs with PV system using monthly simulations"""
+        """Calculate annual costs with PV system using daily simulations with day-of-week tracking"""
         if not self.pv_system:
             return None
         
-        # Simulate each month separately to account for seasonal variations
+        # Simulate each day of the year to account for seasonal AND weekly variations
+        # Assume year starts on a Monday (day_of_week=0) - January 1st
         days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
         
         annual_grid_import = 0
@@ -413,17 +547,25 @@ class PVFeasibilityCalculator:
         annual_ev_charged = 0
         annual_household_consumption = 0
         
+        current_day_of_week = 0  # Start with Monday
+        
         for month in range(1, 13):
-            daily_flow = self.simulate_daily_energy_flow(with_battery, month)
             days = days_in_month[month - 1]
             
-            annual_grid_import += daily_flow['grid_import_kwh'] * days
-            annual_grid_import_household += daily_flow['grid_import_household_kwh'] * days
-            annual_grid_import_ev += daily_flow['grid_import_ev_kwh'] * days
-            annual_excess_to_grid += daily_flow['excess_to_grid_kwh'] * days
-            annual_pv_self_consumption += daily_flow['pv_self_consumption_kwh'] * days
-            annual_ev_charged += daily_flow['ev_charged_kwh'] * days
-            annual_household_consumption += daily_flow['household_consumption_kwh'] * days
+            # Simulate each day of the month
+            for _ in range(days):
+                daily_flow = self.simulate_daily_energy_flow(with_battery, month, current_day_of_week)
+                
+                annual_grid_import += daily_flow['grid_import_kwh']
+                annual_grid_import_household += daily_flow['grid_import_household_kwh']
+                annual_grid_import_ev += daily_flow['grid_import_ev_kwh']
+                annual_excess_to_grid += daily_flow['excess_to_grid_kwh']
+                annual_pv_self_consumption += daily_flow['pv_self_consumption_kwh']
+                annual_ev_charged += daily_flow['ev_charged_kwh']
+                annual_household_consumption += daily_flow['household_consumption_kwh']
+                
+                # Move to next day of week
+                current_day_of_week = (current_day_of_week + 1) % 7
         
         # Costs
         annual_variable_cost = annual_grid_import * self.tariff.get_total_cost_per_kwh()
@@ -520,10 +662,10 @@ class PVFeasibilityCalculator:
             report.append("EV Charging Profile:")
             report.append(f"  Daily Driving: {self.ev_profile.daily_driving_kwh:.1f} kWh (~{self.ev_profile.daily_driving_kwh * 4:.0f} km)")
             report.append(f"  Charging Hours: {len(self.ev_profile.charging_hours)} hours/day (evening/night)")
-            report.append(f"  Note: EV can use battery (if available) or grid power")
+            report.append("  Note: EV can use battery (if available) or grid power")
         
         report.append("")
-        report.append(f"Electricity Costs (without PV):")
+        report.append("Electricity Costs (without PV):")
         if self.ev_profile.enabled:
             report.append(f"  Household: €{baseline['household_annual_cost']:.2f}/year")
             report.append(f"  EV Charging: €{baseline['ev_annual_cost']:.2f}/year")
