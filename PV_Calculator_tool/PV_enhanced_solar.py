@@ -74,8 +74,9 @@ class EnhancedSolarCalculator:
                 'angle': tilt,
                 'aspect': azimuth,
                 'loss': loss,
-                'pvtechchoice': 'crystSi',  # Crystalline silicon (most common)
-                'mountingplace': 'free',     # Free-standing (vs building-integrated)
+                'pvtechchoice': 'crystSi',  # Crystalline silicon
+                'mountingplace': 'building',  # Building-integrated (overlay mounting)
+                'raddatabase': 'PVGIS-SARAH3',  # Use SARAH3 database (most recent)
                 'outputformat': 'json'
             }
             
@@ -306,7 +307,7 @@ def calculate_enhanced_solar_production(
     peak_power_kw: float,
     tilt: float = 35.0,
     azimuth: float = 180.0,
-    system_efficiency: float = 0.965,  # 3.5% losses (PVGIS website default: 1% cable + 2% inverter + 0.5% PV)
+    system_efficiency: float = 0.8948,  # 10.52% losses (PVGIS realistic losses including angle of incidence, spectral, temperature effects)
     use_pvgis: bool = True,
     use_weather: bool = True
 ) -> Dict:
@@ -384,8 +385,8 @@ if __name__ == "__main__":
         lon=lon,
         peak_power_kw=10.0,
         tilt=35.0,
-        azimuth=180.0,
-        system_efficiency=0.965,  # 3.5% losses (PVGIS website default: 1% cable + 2% inverter + 0.5% PV)
+        azimuth=22.5,  # SSW orientation
+        system_efficiency=0.8948,  # 10.52% losses (realistic losses with angle of incidence, spectral, temperature effects)
         use_pvgis=True,
         use_weather=True
     )

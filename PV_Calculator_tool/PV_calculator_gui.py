@@ -865,9 +865,9 @@ class PVCalculatorGUI(QMainWindow):
             
             peak_power = float(self.pv_size.text())
             tilt = float(self.pv_tilt.value()) if hasattr(self, 'pv_tilt') else 35.0
-            azimuth = 180.0  # Default South
+            azimuth = 22.5  # SSW (South-South-West) - matches typical roof orientation
             
-            self.solar_data_source.setText("🔄 Fetching enhanced solar data...")
+            self.solar_data_source.setText("🔄 Fetching PVGIS data...")
             QApplication.processEvents()
             
             # Import enhanced solar calculator
@@ -880,17 +880,20 @@ class PVCalculatorGUI(QMainWindow):
                     peak_power_kw=peak_power,
                     tilt=tilt,
                     azimuth=azimuth,
-                    system_efficiency=0.965,  # 3.5% losses (PVGIS website default: 1% cable + 2% inverter + 0.5% PV)
+                    system_efficiency=0.8948,  # 10.52% total losses (angle of incidence, spectral, temperature)
                     use_pvgis=True,
                     use_weather=True
                 )
                 
                 # Build result message
                 data_source = result['data_source']
-                message_parts = [f"✓ Successfully fetched enhanced solar data!\n"]
+                message_parts = [f"✓ Successfully fetched PVGIS solar data!\n"]
                 message_parts.append(f"\n📍 Location: Lat {lat:.2f}, Lon {lon:.2f}")
-                message_parts.append(f"⚡ System: {peak_power:.1f} kWp, {tilt:.0f}° tilt")
-                message_parts.append(f"\n📊 Data Source: {data_source}")
+                message_parts.append(f"⚡ System: {peak_power:.1f} kWp")
+                message_parts.append(f"🔧 Tilt: {tilt:.0f}°, Azimuth: {azimuth:.1f}° (SSW)")
+                message_parts.append(f"📉 System Losses: 10.52% (realistic)")
+                message_parts.append(f"🏠 Mounting: Building-integrated (overlay)")
+                message_parts.append(f"\n📊 Database: {data_source}")
                 
                 if result.get('monthly_production'):
                     annual_production = sum(result['monthly_production'].values())
@@ -914,6 +917,7 @@ class PVCalculatorGUI(QMainWindow):
                     message_parts.append(f"\n\n✨ Using PVGIS satellite irradiance data!")
                     message_parts.append(f"📈 Based on real historical weather & cloud conditions")
                     message_parts.append(f"🎯 Typical accuracy: ±5-8%")
+                    message_parts.append(f"\n✅ This data will be used in all energy flow calculations and graphs!")
                 elif 'built-in' in data_source.lower():
                     message_parts.append(f"\n\n💡 Using built-in model")
                     message_parts.append(f"📈 Typical accuracy: ±15-25%")
@@ -926,13 +930,19 @@ class PVCalculatorGUI(QMainWindow):
                 )
                 
                 # Update status label
-                self.solar_data_source.setText(f"📊 Using: {data_source}")
+                annual_total = sum(result['monthly_production'].values()) if result.get('monthly_production') else 0
+                self.solar_data_source.setText(f"📊 Using PVGIS Data: {annual_total:,.0f} kWh/year")
                 self.solar_data_source.setStyleSheet("color: green; font-weight: bold; font-size: 9pt; padding: 5px;")
                 
                 # Store the enhanced data for use in calculations
                 if not hasattr(self, 'enhanced_solar_cache'):
                     self.enhanced_solar_cache = {}
                 self.enhanced_solar_cache = result
+                
+                # Load PVGIS data into solar generator for use in calculations
+                if SOLAR_V2_AVAILABLE and result.get('monthly_production') and self.solar_generator:
+                    self.solar_generator.set_pvgis_data(result['monthly_production'])
+                    print("✓ PVGIS data integrated into solar generator")
                 
             except ImportError as e:
                 QMessageBox.warning(

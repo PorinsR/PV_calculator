@@ -147,7 +147,17 @@ class SolarGenerationCalculator:
     """Calculate solar PV generation patterns"""
     
     def __init__(self):
-        pass
+        self.pvgis_data = None  # Store PVGIS monthly data if available
+    
+    def set_pvgis_data(self, monthly_production: Dict[int, float]):
+        """
+        Set PVGIS monthly production data to use instead of built-in model
+        
+        Args:
+            monthly_production: Dictionary mapping month (1-12) to production in kWh
+        """
+        self.pvgis_data = monthly_production
+        print(f"✓ PVGIS data loaded: {sum(monthly_production.values()):.1f} kWh/year")
     
     def get_hourly_pv_pattern(self, location: LocationData, month: int, tilt: float = 35.0) -> List[float]:
         """
@@ -222,6 +232,7 @@ class SolarGenerationCalculator:
                                    year: int = 0) -> float:
         """
         Calculate total daily PV generation for a specific month
+        Uses PVGIS data if available, otherwise falls back to built-in model
         
         Args:
             system: SolarSystemProfile with system specs
@@ -231,6 +242,20 @@ class SolarGenerationCalculator:
         Returns:
             Daily generation in kWh
         """
+        # If PVGIS data is available, use it instead of built-in model
+        if self.pvgis_data and month in self.pvgis_data:
+            # PVGIS gives monthly total, convert to average daily
+            days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+            monthly_total = self.pvgis_data[month]
+            daily_production = monthly_total / days_in_month[month - 1]
+            
+            # Apply degradation
+            degradation_factor = (1 - system.annual_degradation_rate) ** year
+            daily_production *= degradation_factor
+            
+            return daily_production
+        
+        # Fall back to built-in model
         # Get monthly irradiance factor
         monthly_factor = system.location.monthly_irradiance_factors[month - 1]
         
