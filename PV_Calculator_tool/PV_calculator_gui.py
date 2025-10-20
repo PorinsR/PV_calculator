@@ -1733,57 +1733,31 @@ class PVCalculatorGUI(QMainWindow):
     
     def setup_unified_v2_tab(self):
         """Setup the unified energy flow tab (Version 2)"""
-        layout = QVBoxLayout(self.tab_unified_v2)
+        # Create scroll area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        # Create container widget for scroll area
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setAlignment(Qt.AlignTop)
+        
+        scroll.setWidget(container)
+        
+        # Set layout for tab
+        tab_layout = QVBoxLayout(self.tab_unified_v2)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.addWidget(scroll)
         
         if not INTEGRATED_V2_AVAILABLE:
-            warning_label = QLabel("⚠️ Integrated Energy Flow Analysis V2 not available.\n\n"
+            warning_label = QLabel("⚠️ Integrated Energy Flow Analysis not available.\n\n"
                                   "The module files may be missing or there was an import error.\n"
                                   "Please ensure PV_battery_flow.py and PV_integrated_graphs.py are in the same directory.")
             warning_label.setFont(QFont("Arial", 12))
             warning_label.setAlignment(Qt.AlignCenter)
             layout.addWidget(warning_label)
             return
-        
-        # Header
-        header_label = QLabel("🔋 Unified Energy Flow Analysis - Version 2")
-        header_label.setFont(QFont("Arial", 14, QFont.Bold))
-        header_label.setStyleSheet("color: darkgreen; padding: 10px;")
-        layout.addWidget(header_label)
-        
-        # Info text
-        info_text = QLabel(
-            "Complete energy system simulation combining:\n"
-            "• Consumption patterns from your household profile\n"
-            "• Solar generation from your PV system\n"
-            "• Battery charging/discharging\n"
-            "• Grid import/export flows\n"
-            "• Self-sufficiency and energy balance analysis\n\n"
-            "📋 Configuration is pulled from the 'Input Parameters' tab (Tab 1)"
-        )
-        info_text.setWordWrap(True)
-        info_text.setFont(QFont("Arial", 10))
-        info_text.setStyleSheet("background-color: #e8f5e9; padding: 10px; border-radius: 5px;")
-        layout.addWidget(info_text)
-        
-        # Current Configuration Display (Read-only summary)
-        config_group = QGroupBox("Current System Configuration (from Input Parameters)")
-        config_layout = QVBoxLayout()
-        config_group.setLayout(config_layout)
-        
-        self.unified_config_display = QLabel()
-        self.unified_config_display.setWordWrap(True)
-        self.unified_config_display.setStyleSheet(
-            "background-color: white; padding: 10px; border: 1px solid #ccc; "
-            "border-radius: 5px; font-family: monospace; font-size: 9pt;"
-        )
-        config_layout.addWidget(self.unified_config_display)
-        
-        refresh_btn = QPushButton("🔄 Refresh Configuration")
-        refresh_btn.setStyleSheet("background-color: #2196F3; color: white; padding: 5px;")
-        refresh_btn.clicked.connect(self.update_unified_config_display)
-        config_layout.addWidget(refresh_btn)
-        
-        layout.addWidget(config_group)
         
         # Date Selection
         from PyQt5.QtWidgets import QDateEdit
@@ -1857,84 +1831,79 @@ class PVCalculatorGUI(QMainWindow):
         
         graphs_layout.addLayout(row_layout2)
         
-        # Scenario Comparison Button
-        row_layout3 = QHBoxLayout()
+        # Energy Flow Distribution Button (NEW)
+        row_layout_flow = QHBoxLayout()
         
-        btn3 = QPushButton("Compare Scenarios (No PV vs PV vs PV+Battery)")
-        btn3.setMinimumHeight(40)
-        btn3.setMinimumWidth(250)
-        btn3.setStyleSheet("background-color: #9C27B0; color: white; font-weight: bold; padding: 10px; font-size: 12pt;")
-        btn3.clicked.connect(self.show_scenario_comparison)
-        row_layout3.addWidget(btn3)
+        btn_flow = QPushButton("Energy Flow Distribution")
+        btn_flow.setMinimumHeight(40)
+        btn_flow.setMinimumWidth(250)
+        btn_flow.setStyleSheet("background-color: #9C27B0; color: white; font-weight: bold; padding: 10px; font-size: 12pt;")
+        btn_flow.clicked.connect(self.show_energy_flow_distribution)
+        row_layout_flow.addWidget(btn_flow)
         
-        desc_label3 = QLabel("Compare three scenarios:\n"
-                            "• No PV, No Battery (baseline)\n"
-                            "• PV Only (no storage)\n"
-                            "• PV + Battery (full system)\n"
-                            "• ROI and payback analysis")
-        desc_label3.setFont(QFont("Arial", 9))
-        desc_label3.setStyleSheet("font-style: italic;")
-        row_layout3.addWidget(desc_label3)
-        row_layout3.addStretch()
+        desc_label_flow = QLabel("Detailed power usage analysis:\n"
+                                "• How solar power is distributed\n"
+                                "• Self-consumption vs export\n"
+                                "• Grid import dependency\n"
+                                "• Monthly energy flow breakdown")
+        desc_label_flow.setFont(QFont("Arial", 9))
+        desc_label_flow.setStyleSheet("font-style: italic;")
+        row_layout_flow.addWidget(desc_label_flow)
+        row_layout_flow.addStretch()
         
-        graphs_layout.addLayout(row_layout3)
+        graphs_layout.addLayout(row_layout_flow)
+        
+        # Scenario Comparison Buttons (Split into multiple cleaner graphs)
+        comparison_group = QGroupBox("Scenario Comparison Graphs")
+        comparison_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 11pt; }")
+        comparison_layout = QVBoxLayout()
+        
+        comparison_info = QLabel("Compare scenarios: No PV vs PV Only vs PV+Battery")
+        comparison_info.setFont(QFont("Arial", 9))
+        comparison_info.setStyleSheet("font-style: italic; margin-bottom: 10px;")
+        comparison_layout.addWidget(comparison_info)
+        
+        # Button 1: Cumulative Payback
+        row1 = QHBoxLayout()
+        btn_cumulative = QPushButton("Cumulative Payback Timeline")
+        btn_cumulative.setMinimumHeight(35)
+        btn_cumulative.setStyleSheet("background-color: #9C27B0; color: white; font-weight: bold; padding: 8px; font-size: 11pt;")
+        btn_cumulative.clicked.connect(self.show_cumulative_payback_comparison)
+        row1.addWidget(btn_cumulative)
+        desc1 = QLabel("20-year cost accumulation and breakeven analysis")
+        desc1.setFont(QFont("Arial", 9))
+        row1.addWidget(desc1, 1)
+        comparison_layout.addLayout(row1)
+        
+        # Button 2: Summary Report
+        row2 = QHBoxLayout()
+        btn_summary = QPushButton("Detailed Summary Report")
+        btn_summary.setMinimumHeight(35)
+        btn_summary.setStyleSheet("background-color: #607D8B; color: white; font-weight: bold; padding: 8px; font-size: 11pt;")
+        btn_summary.clicked.connect(self.show_summary_comparison)
+        row2.addWidget(btn_summary)
+        desc2 = QLabel("Complete numerical breakdown of all scenarios")
+        desc2.setFont(QFont("Arial", 9))
+        row2.addWidget(desc2, 1)
+        comparison_layout.addLayout(row2)
+        
+        comparison_group.setLayout(comparison_layout)
+        graphs_layout.addWidget(comparison_group)
         
         layout.addWidget(graphs_group)
         
-        # Status label
-        self.unified_status = QLabel("")
-        self.unified_status.setFont(QFont("Arial", 9))
-        self.unified_status.setStyleSheet("font-style: italic; color: darkgreen;")
-        layout.addWidget(self.unified_status)
-        
         layout.addStretch()
         
-        # Initial config display
-        self.update_unified_config_display()
+        # Status label (outside scroll area for persistent visibility)
+        self.unified_status = QLabel("")
+        self.unified_status.setFont(QFont("Arial", 9))
+        self.unified_status.setStyleSheet("font-style: italic; color: darkgreen; padding: 5px;")
+        tab_layout.addWidget(self.unified_status)
     
     def update_unified_config_display(self):
-        """Update the configuration display with current values from Tab 1"""
+        """Clear battery SOC cache when configuration changes (config display removed for auto-update)"""
         # Clear battery SOC cache when configuration changes
         self.battery_soc_cache.clear()
-        
-        try:
-            # Get values from Tab 1
-            monthly_consumption = float(self.monthly_consumption.text())
-            annual_consumption = monthly_consumption * 12
-            pattern_type = self.consumption_pattern_type.currentData() if hasattr(self, 'consumption_pattern_type') else 'working_family'
-            seasonal_strength = self.consumption_seasonal.value() / 100.0 if hasattr(self, 'consumption_seasonal') else 0.2
-            
-            pv_size = float(self.pv_size.text()) if self.pv_enabled.isChecked() else 0.0
-            location_key = self.pv_location.currentData() if hasattr(self, 'pv_location') else 'riga_latvia'
-            location_name = LOCATIONS[location_key].name if SOLAR_V2_AVAILABLE and location_key in LOCATIONS else "Unknown"
-            tilt = self.pv_tilt.value() if hasattr(self, 'pv_tilt') else 35.0
-            
-            battery_capacity = float(self.battery_capacity.text()) if self.battery_enabled.isChecked() else 0.0
-            
-            # Format display
-            config_text = f"""CONSUMPTION:
-  Annual:           {annual_consumption:.0f} kWh  ({monthly_consumption:.0f} kWh/month)
-  Pattern Type:     {pattern_type.replace('_', ' ').title()}
-  Seasonal Var:     {seasonal_strength:.2f}
-
-SOLAR SYSTEM:
-  Size:             {pv_size:.1f} kWp
-  Location:         {location_name}
-  Panel Tilt:       {tilt:.0f}°
-  Status:           {'Enabled' if self.pv_enabled.isChecked() else 'Disabled'}
-
-BATTERY:
-  Capacity:         {battery_capacity:.1f} kWh
-  Status:           {'Enabled' if self.battery_enabled.isChecked() else 'Disabled'}
-  Efficiency:       95% (default)
-  Min SOC:          10% (default)
-
-💡 To change these values, go to the 'Input Parameters' tab and click 'Refresh Configuration'
-"""
-            self.unified_config_display.setText(config_text)
-            
-        except Exception as e:
-            self.unified_config_display.setText(f"Error reading configuration: {str(e)}\n\nPlease check Input Parameters tab.")
     
     def get_unified_config(self):
         """Get unified configuration from Tab 1 inputs"""
@@ -2091,6 +2060,469 @@ BATTERY:
         except Exception as e:
             QMessageBox.critical(self, "Graph Error", f"Error generating graph: {str(e)}")
             self.unified_status.setText("✗ Error generating graph")
+    
+    def show_energy_flow_distribution(self):
+        """Show detailed energy flow distribution analysis"""
+        household, solar_system, battery_calc = self.get_unified_config()
+        if not household or not solar_system or not battery_calc:
+            return
+        
+        self.unified_status.setText("Calculating annual energy flow distribution... This may take a moment...")
+        QApplication.processEvents()
+        
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.patches import FancyBboxPatch
+            from datetime import datetime, timedelta
+            import numpy as np
+            
+            # Get pricing parameters
+            selling_price = float(self.nordpool_price.text()) if hasattr(self, 'nordpool_price') else 0.06
+            transfer_cost = float(self.transfer_cost.text()) if hasattr(self, 'transfer_cost') else 0.04
+            electricity_cost = float(self.electricity_cost.text()) if hasattr(self, 'electricity_cost') else 0.08
+            service_cost = float(self.service_cost.text()) if hasattr(self, 'service_cost') else 0.01
+            vat_rate = float(self.vat_rate.text()) / 100.0 if hasattr(self, 'vat_rate') else 0.21
+            
+            import_rate = (electricity_cost + transfer_cost + service_cost) * (1 + vat_rate)
+            export_rate = selling_price - transfer_cost * (1 + vat_rate)
+            export_rate = max(0, export_rate)
+            
+            year = 2024
+            
+            # Simulate entire year to get accurate data
+            monthly_data = {}
+            for month in range(1, 13):
+                monthly_data[month] = {
+                    'total_consumption': 0,
+                    'total_generation': 0,
+                    'self_consumption': 0,
+                    'grid_import': 0,
+                    'grid_export': 0,
+                    'battery_charged': 0,
+                    'battery_discharged': 0
+                }
+            
+            current_soc = battery_calc.battery_capacity * 0.5
+            
+            # Track battery throughput to show battery-stored solar usage
+            total_battery_charged = 0
+            total_battery_discharged = 0
+            
+            for day_of_year in range(1, 366):
+                date_obj = datetime(year, 1, 1) + timedelta(days=day_of_year - 1)
+                month = date_obj.month
+                day_of_week = date_obj.weekday()
+                
+                result = battery_calc.simulate_daily_flow(
+                    self.consumption_generator, self.solar_generator,
+                    household, solar_system,
+                    month, day_of_week, initial_soc=current_soc
+                )
+                
+                current_soc = result.hourly_battery_soc[-1]
+                
+                # Track battery charge/discharge
+                daily_charged = sum(result.hourly_battery_charge)
+                daily_discharged = sum(result.hourly_battery_discharge)
+                
+                monthly_data[month]['total_consumption'] += result.total_consumption
+                monthly_data[month]['total_generation'] += result.total_generation
+                monthly_data[month]['self_consumption'] += result.total_self_consumption
+                monthly_data[month]['grid_import'] += result.total_grid_import
+                monthly_data[month]['grid_export'] += result.total_grid_export
+                monthly_data[month]['battery_charged'] += daily_charged
+                monthly_data[month]['battery_discharged'] += daily_discharged
+                
+                total_battery_charged += daily_charged
+                total_battery_discharged += daily_discharged
+                
+                # Update progress
+                if day_of_year % 30 == 0:
+                    self.unified_status.setText(f"Calculating energy flows... Day {day_of_year}/365")
+                    QApplication.processEvents()
+            
+            # Calculate annual totals
+            annual_consumption = sum(m['total_consumption'] for m in monthly_data.values())
+            annual_generation = sum(m['total_generation'] for m in monthly_data.values())
+            annual_self_consumption = sum(m['self_consumption'] for m in monthly_data.values())
+            annual_grid_import = sum(m['grid_import'] for m in monthly_data.values())
+            annual_grid_export = sum(m['grid_export'] for m in monthly_data.values())
+            
+            # Calculate grid-stored solar (net energy accounting)
+            # If you export solar and later import, that import counts as using your own solar (grid as virtual battery)
+            grid_stored_solar = min(annual_grid_export, annual_grid_import)
+            
+            # Total solar utilization includes direct use, battery use, AND grid-retrieved solar
+            total_solar_utilized = annual_self_consumption + grid_stored_solar
+            
+            # Calculate percentages
+            self_consumption_ratio = (annual_self_consumption / annual_consumption * 100) if annual_consumption > 0 else 0
+            solar_utilization_ratio = (total_solar_utilized / annual_generation * 100) if annual_generation > 0 else 0
+            export_ratio = (annual_grid_export / annual_generation * 100) if annual_generation > 0 else 0
+            
+            # Net grid interaction (after accounting for grid-stored solar)
+            net_grid_import = annual_grid_import - grid_stored_solar
+            net_grid_export = annual_grid_export - grid_stored_solar
+            
+            # Create comprehensive visualization
+            fig = plt.figure(figsize=(18, 12))
+            gs = fig.add_gridspec(3, 3, hspace=0.35, wspace=0.35)
+            
+            # Plot 1: Energy Flow Sankey-style (Top Left, spans 2 columns)
+            ax1 = fig.add_subplot(gs[0, :2])
+            ax1.set_xlim(0, 10)
+            ax1.set_ylim(0, 10)
+            ax1.axis('off')
+            ax1.set_title('Annual Energy Flow - Net Energy Accounting', fontsize=14, fontweight='bold', pad=20)
+            
+            # Draw flow diagram
+            # Solar Generation box
+            solar_box = FancyBboxPatch((0.5, 7), 1.5, 1.5, boxstyle="round,pad=0.1", 
+                                       edgecolor='orange', facecolor='#FFA500', linewidth=3, alpha=0.7)
+            ax1.add_patch(solar_box)
+            ax1.text(1.25, 7.75, f'Solar\nGeneration\n{annual_generation:,.0f} kWh', 
+                    ha='center', va='center', fontsize=10, fontweight='bold', color='white')
+            
+            # Household consumption box
+            house_box = FancyBboxPatch((7, 6.5), 1.5, 2, boxstyle="round,pad=0.1",
+                                       edgecolor='blue', facecolor='#4169E1', linewidth=3, alpha=0.7)
+            ax1.add_patch(house_box)
+            ax1.text(7.75, 7.5, f'Household\nConsumption\n{annual_consumption:,.0f} kWh',
+                    ha='center', va='center', fontsize=10, fontweight='bold', color='white')
+            
+            # Battery box
+            battery_box = FancyBboxPatch((4, 4), 2, 1.5, boxstyle="round,pad=0.1",
+                                        edgecolor='green', facecolor='#32CD32', linewidth=3, alpha=0.7)
+            ax1.add_patch(battery_box)
+            ax1.text(5, 4.75, f'Battery\nStorage\n{battery_calc.battery_capacity:.1f} kWh',
+                    ha='center', va='center', fontsize=10, fontweight='bold', color='white')
+            
+            # Grid import box
+            grid_import_box = FancyBboxPatch((0.5, 1.5), 1.5, 1.5, boxstyle="round,pad=0.1",
+                                            edgecolor='red', facecolor='#DC143C', linewidth=3, alpha=0.7)
+            ax1.add_patch(grid_import_box)
+            ax1.text(1.25, 2.25, f'Grid\nImport\n{annual_grid_import:,.0f} kWh',
+                    ha='center', va='center', fontsize=9, fontweight='bold', color='white')
+            
+            # Grid export box
+            grid_export_box = FancyBboxPatch((7, 1.5), 1.5, 1.5, boxstyle="round,pad=0.1",
+                                            edgecolor='green', facecolor='#228B22', linewidth=3, alpha=0.7)
+            ax1.add_patch(grid_export_box)
+            ax1.text(7.75, 2.25, f'Grid\nExport\n{annual_grid_export:,.0f} kWh',
+                    ha='center', va='center', fontsize=9, fontweight='bold', color='white')
+            
+            # Calculate breakdown for visual
+            battery_stored_used_visual = total_battery_discharged * battery_calc.battery_efficiency
+            direct_solar_used_visual = annual_self_consumption - battery_stored_used_visual
+            
+            # Draw arrows
+            # Solar to household (self-consumption) - split into direct and via battery
+            ax1.annotate('', xy=(7, 7.5), xytext=(2, 7.75),
+                        arrowprops=dict(arrowstyle='->', lw=3, color='orange', alpha=0.7))
+            ax1.text(4.5, 8.7, f'Total Solar Utilized: {total_solar_utilized:,.0f} kWh\n({solar_utilization_ratio:.1f}% of solar)',
+                    ha='center', fontsize=9, fontweight='bold', 
+                    bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.9, edgecolor='orange', linewidth=2))
+            ax1.text(4.5, 7.8, f'• Direct: {direct_solar_used_visual:,.0f} kWh\n• Via Battery: {battery_stored_used_visual:,.0f} kWh\n• Via Grid: {grid_stored_solar:,.0f} kWh',
+                    ha='center', fontsize=7, style='italic',
+                    bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.7))
+            
+            # Solar to battery (charging)
+            if total_battery_charged > 0:
+                ax1.annotate('', xy=(4, 5.5), xytext=(1.5, 7),
+                            arrowprops=dict(arrowstyle='->', lw=2, color='green', alpha=0.7, linestyle=':'))
+                ax1.text(2.5, 6.2, f'Charge\n{total_battery_charged:,.0f} kWh',
+                        ha='center', fontsize=7, bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.6))
+            
+            # Battery to household (discharging)
+            if total_battery_discharged > 0:
+                ax1.annotate('', xy=(7, 6.3), xytext=(6, 4.75),
+                            arrowprops=dict(arrowstyle='->', lw=2, color='blue', alpha=0.7, linestyle=':'))
+                ax1.text(6.7, 5.5, f'Discharge\n{battery_stored_used_visual:,.0f} kWh\n(after loss)',
+                        ha='center', fontsize=7, bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.6))
+            
+            # Solar to grid export
+            if annual_grid_export > 0:
+                ax1.annotate('', xy=(7.75, 3), xytext=(1.25, 6.5),
+                            arrowprops=dict(arrowstyle='->', lw=2, color='green', alpha=0.6, linestyle='--'))
+                if grid_stored_solar > 0:
+                    ax1.text(4, 4.5, f'Export: {annual_grid_export:,.0f} kWh\n(Net export: {net_grid_export:,.0f} kWh)\n({export_ratio:.1f}% of solar)',
+                            ha='center', fontsize=7, bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.6))
+                else:
+                    ax1.text(4, 4.5, f'{annual_grid_export:,.0f} kWh\n({export_ratio:.1f}% of solar)',
+                            ha='center', fontsize=8, bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.6))
+            
+            # Grid import to household
+            if annual_grid_import > 0:
+                ax1.annotate('', xy=(7, 6.5), xytext=(2, 2.25),
+                            arrowprops=dict(arrowstyle='->', lw=2.5, color='red', alpha=0.7))
+                grid_dependency = (annual_grid_import / annual_consumption * 100) if annual_consumption > 0 else 0
+                if grid_stored_solar > 0:
+                    ax1.text(4, 3.2, f'Import: {annual_grid_import:,.0f} kWh\n(Your solar: {grid_stored_solar:,.0f} kWh)\n(Net new: {net_grid_import:,.0f} kWh)',
+                            ha='center', fontsize=7, bbox=dict(boxstyle='round', facecolor='pink', alpha=0.6))
+                else:
+                    ax1.text(4, 3.5, f'{annual_grid_import:,.0f} kWh\n({grid_dependency:.1f}% of consumption)',
+                            ha='center', fontsize=8, bbox=dict(boxstyle='round', facecolor='pink', alpha=0.6))
+            
+            # Plot 2: Pie chart - Solar Power Distribution (Top Right)
+            ax2 = fig.add_subplot(gs[0, 2])
+            
+            # Calculate percentages for the pie chart
+            direct_pct = (direct_solar_used_visual / annual_generation * 100) if annual_generation > 0 else 0
+            battery_pct = (battery_stored_used_visual / annual_generation * 100) if annual_generation > 0 else 0
+            grid_stored_pct = (grid_stored_solar / annual_generation * 100) if annual_generation > 0 else 0
+            net_export_pct = (net_grid_export / annual_generation * 100) if annual_generation > 0 else 0
+            
+            solar_distribution = [direct_solar_used_visual, battery_stored_used_visual, grid_stored_solar, net_grid_export]
+            labels = [f'Direct Use\n{direct_solar_used_visual:,.0f} kWh\n({direct_pct:.1f}%)',
+                     f'Via Battery\n{battery_stored_used_visual:,.0f} kWh\n({battery_pct:.1f}%)',
+                     f'Via Grid\n{grid_stored_solar:,.0f} kWh\n({grid_stored_pct:.1f}%)',
+                     f'Net Export\n{net_grid_export:,.0f} kWh\n({net_export_pct:.1f}%)']
+            colors = ['#FFD700', '#87CEEB', '#FF69B4', '#90EE90']
+            explode = (0.05, 0.05, 0.05, 0.1)
+            
+            # Filter out zero values
+            solar_dist_filtered = []
+            labels_filtered = []
+            colors_filtered = []
+            explode_filtered = []
+            for val, lbl, col, exp in zip(solar_distribution, labels, colors, explode):
+                if val > 0:
+                    solar_dist_filtered.append(val)
+                    labels_filtered.append(lbl)
+                    colors_filtered.append(col)
+                    explode_filtered.append(exp)
+            
+            wedges, texts, autotexts = ax2.pie(solar_dist_filtered, labels=labels_filtered, colors=colors_filtered, 
+                                                explode=explode_filtered, autopct='',
+                                                shadow=True, startangle=90)
+            for text in texts:
+                text.set_fontsize(8)
+                text.set_fontweight('bold')
+            
+            # Add threshold indicator
+            threshold_met_visual = solar_utilization_ratio >= 80.0
+            threshold_icon = "✓" if threshold_met_visual else "✗"
+            threshold_text_color = "green" if threshold_met_visual else "red"
+            ax2.text(0, -1.5, f'{threshold_icon} 80% Target: {solar_utilization_ratio:.1f}% {threshold_icon}', 
+                    ha='center', fontsize=10, fontweight='bold', 
+                    color=threshold_text_color,
+                    bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.7, edgecolor=threshold_text_color, linewidth=2))
+            
+            ax2.set_title('Solar Power Distribution\n(How Generated Solar is Used)', fontsize=11, fontweight='bold', pad=10)
+            
+            # Plot 3: Pie chart - Household Energy Sources (Middle Left)
+            ax3 = fig.add_subplot(gs[1, 0])
+            
+            # Show household energy including grid-stored solar detail
+            household_sources = [annual_self_consumption, grid_stored_solar, net_grid_import]
+            solar_pct_house = (annual_self_consumption / annual_consumption * 100) if annual_consumption > 0 else 0
+            grid_stored_pct_house = (grid_stored_solar / annual_consumption * 100) if annual_consumption > 0 else 0
+            net_import_pct_house = (net_grid_import / annual_consumption * 100) if annual_consumption > 0 else 0
+            
+            labels_house = [f'Solar (immediate)\n{annual_self_consumption:,.0f} kWh\n({solar_pct_house:.1f}%)',
+                           f'Solar (via grid)\n{grid_stored_solar:,.0f} kWh\n({grid_stored_pct_house:.1f}%)',
+                           f'Grid (net new)\n{net_grid_import:,.0f} kWh\n({net_import_pct_house:.1f}%)']
+            colors_house = ['#FFA500', '#FF69B4', '#DC143C']
+            explode_house = (0.05, 0.05, 0.05)
+            
+            # Filter out zero values
+            household_filtered = []
+            labels_house_filtered = []
+            colors_house_filtered = []
+            explode_house_filtered = []
+            for val, lbl, col, exp in zip(household_sources, labels_house, colors_house, explode_house):
+                if val > 0:
+                    household_filtered.append(val)
+                    labels_house_filtered.append(lbl)
+                    colors_house_filtered.append(col)
+                    explode_house_filtered.append(exp)
+            
+            wedges2, texts2, autotexts2 = ax3.pie(household_filtered, labels=labels_house_filtered, colors=colors_house_filtered,
+                                                   explode=explode_house_filtered, autopct='',
+                                                   shadow=True, startangle=90)
+            for text in texts2:
+                text.set_fontsize(8)
+                text.set_fontweight('bold')
+            ax3.set_title('Household Energy Sources\n(Net Energy Accounting)', fontsize=11, fontweight='bold', pad=10)
+            
+            # Plot 4: Monthly breakdown - Stacked bar chart (Middle, spans 2 columns)
+            ax4 = fig.add_subplot(gs[1, 1:])
+            
+            months = list(range(1, 13))
+            month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            
+            self_cons_monthly = [monthly_data[m]['self_consumption'] for m in months]
+            grid_import_monthly = [monthly_data[m]['grid_import'] for m in months]
+            grid_export_monthly = [monthly_data[m]['grid_export'] for m in months]
+            
+            x = np.arange(len(months))
+            width = 0.6
+            
+            # Stacked bars for consumption sources
+            p1 = ax4.bar(x, self_cons_monthly, width, label='Solar Self-Consumption', color='#FFA500', alpha=0.8)
+            p2 = ax4.bar(x, grid_import_monthly, width, bottom=self_cons_monthly, 
+                        label='Grid Import', color='#DC143C', alpha=0.8)
+            
+            ax4.set_xlabel('Month', fontsize=11, fontweight='bold')
+            ax4.set_ylabel('Energy (kWh)', fontsize=11, fontweight='bold')
+            ax4.set_title('Monthly Energy Sources Breakdown', fontsize=12, fontweight='bold')
+            ax4.set_xticks(x)
+            ax4.set_xticklabels(month_names)
+            ax4.legend(loc='upper left', fontsize=9)
+            ax4.grid(True, alpha=0.3, axis='y')
+            
+            # Plot 5: Self-sufficiency by month (Bottom Left)
+            ax5 = fig.add_subplot(gs[2, 0])
+            
+            self_suff_monthly = [(monthly_data[m]['self_consumption'] / monthly_data[m]['total_consumption'] * 100)
+                                if monthly_data[m]['total_consumption'] > 0 else 0
+                                for m in months]
+            
+            ax5.plot(x, self_suff_monthly, marker='o', linewidth=2.5, markersize=8, color='green')
+            ax5.fill_between(x, self_suff_monthly, alpha=0.3, color='green')
+            ax5.axhline(y=self_consumption_ratio, color='red', linestyle='--', alpha=0.6, 
+                       linewidth=2, label=f'Annual Avg: {self_consumption_ratio:.1f}%')
+            ax5.set_xlabel('Month', fontsize=11, fontweight='bold')
+            ax5.set_ylabel('Self-Sufficiency (%)', fontsize=11, fontweight='bold')
+            ax5.set_title('Monthly Self-Sufficiency', fontsize=12, fontweight='bold')
+            ax5.set_xticks(x)
+            ax5.set_xticklabels(month_names)
+            ax5.set_ylim(0, 100)
+            ax5.legend(fontsize=9)
+            ax5.grid(True, alpha=0.3)
+            
+            # Plot 6: Grid import vs export by month (Bottom Middle)
+            ax6 = fig.add_subplot(gs[2, 1])
+            
+            width2 = 0.35
+            p3 = ax6.bar([i - width2/2 for i in x], grid_import_monthly, width2, 
+                        label='Grid Import', color='red', alpha=0.7, edgecolor='black')
+            p4 = ax6.bar([i + width2/2 for i in x], grid_export_monthly, width2,
+                        label='Grid Export', color='green', alpha=0.7, edgecolor='black')
+            
+            ax6.set_xlabel('Month', fontsize=11, fontweight='bold')
+            ax6.set_ylabel('Energy (kWh)', fontsize=11, fontweight='bold')
+            ax6.set_title('Monthly Grid Import vs Export', fontsize=12, fontweight='bold')
+            ax6.set_xticks(x)
+            ax6.set_xticklabels(month_names)
+            ax6.legend(fontsize=9)
+            ax6.grid(True, alpha=0.3, axis='y')
+            
+            # Plot 7: Summary statistics (Bottom Right)
+            ax7 = fig.add_subplot(gs[2, 2])
+            ax7.axis('off')
+            
+            # Calculate financial metrics
+            import_cost = annual_grid_import * import_rate
+            export_revenue = annual_grid_export * export_rate
+            net_cost = import_cost - export_revenue
+            
+            # Calculate solar usage breakdown
+            # Battery-stored solar that was later used (accounting for efficiency)
+            battery_stored_used = total_battery_discharged * battery_calc.battery_efficiency
+            # Direct solar consumption (not through battery)
+            direct_solar_used = annual_self_consumption - battery_stored_used
+            
+            # Check if 80% utilization threshold is met
+            utilization_threshold = 80.0
+            threshold_met = solar_utilization_ratio >= utilization_threshold
+            threshold_status = "✓ ACHIEVED" if threshold_met else "✗ NOT MET"
+            threshold_color = "green" if threshold_met else "red"
+            
+            # Calculate how much more/less compared to threshold
+            threshold_diff = solar_utilization_ratio - utilization_threshold
+            threshold_comment = ""
+            if threshold_met:
+                threshold_comment = f"  (+{threshold_diff:.1f}% above target)"
+            else:
+                threshold_comment = f"  ({abs(threshold_diff):.1f}% below target)"
+            
+            summary_text = f"""
+ANNUAL ENERGY SUMMARY
+
+Total Consumption:
+  {annual_consumption:>12,.0f} kWh
+
+Energy Sources:
+  • Solar (immediate): {annual_self_consumption:>8,.0f} kWh
+      - Direct use:    {direct_solar_used:>8,.0f} kWh
+      - Via battery:   {battery_stored_used:>8,.0f} kWh
+  • Grid Import:       {annual_grid_import:>8,.0f} kWh
+      - Your solar:    {grid_stored_solar:>8,.0f} kWh
+      - Net new:       {net_grid_import:>8,.0f} kWh
+
+Solar Generation & Utilization:
+  • Total Generated:   {annual_generation:>8,.0f} kWh
+  
+  • Total Utilized:    {total_solar_utilized:>8,.0f} kWh
+      - Direct use:    {direct_solar_used:>8,.0f} kWh
+      - Via battery:   {battery_stored_used:>8,.0f} kWh
+      - Via grid:      {grid_stored_solar:>8,.0f} kWh
+  
+  • Grid Export:       {annual_grid_export:>8,.0f} kWh
+      - Net export:    {net_grid_export:>8,.0f} kWh
+
+Battery Activity:
+  • Charged (solar):   {total_battery_charged:>8,.0f} kWh
+  • Discharged (used): {total_battery_discharged:>8,.0f} kWh
+  • Efficiency loss:   {total_battery_charged - total_battery_discharged:>8,.0f} kWh
+
+Grid as Virtual Battery:
+  • Exported:          {annual_grid_export:>8,.0f} kWh
+  • Retrieved:         {grid_stored_solar:>8,.0f} kWh
+  • Net to grid:       {net_grid_export:>8,.0f} kWh
+
+Key Metrics:
+  • Self-Sufficiency:  {self_consumption_ratio:>8.1f} %
+  • Solar Utilization: {solar_utilization_ratio:>8.1f} %
+    (Direct + Battery + Grid storage)
+  • Net Export:        {net_export_pct:>8.1f} %
+
+═══════════════════════════════════════
+80% UTILIZATION TARGET
+═══════════════════════════════════════
+Target:      {utilization_threshold:.1f}%
+Current:     {solar_utilization_ratio:.1f}%
+Status:      {threshold_status}
+{threshold_comment}
+
+Solar stored in battery OR exported
+to grid and imported back COUNTS as
+self-used (net energy accounting)!
+═══════════════════════════════════════
+
+Financial Impact:
+  • Import Cost:      {import_cost:>9,.2f} EUR
+  • Export Revenue:   {export_revenue:>9,.2f} EUR
+  • Net Annual Cost:  {net_cost:>9,.2f} EUR
+
+System Configuration:
+  • PV Size:          {solar_system.peak_power_kw:>9.1f} kWp
+  • Battery:          {battery_calc.battery_capacity:>9.1f} kWh
+            """
+            
+            # Determine background color based on threshold
+            summary_bg_color = '#E8F5E9' if threshold_met else '#FFEBEE'  # Light green or light red
+            
+            ax7.text(0.05, 0.95, summary_text, transform=ax7.transAxes,
+                    fontsize=9, verticalalignment='top', family='monospace',
+                    bbox=dict(boxstyle='round', facecolor=summary_bg_color, alpha=0.7, edgecolor='black', linewidth=2))
+            
+            fig.suptitle('Energy Flow Distribution Analysis - Net Energy Accounting (Direct + Battery + Grid Storage)', 
+                        fontsize=15, fontweight='bold', y=0.995)
+            
+            plt.tight_layout()
+            fig.show()
+            
+            # Update status with threshold result
+            status_msg = f"✓ Energy flow distribution analysis complete - Solar Utilization: {solar_utilization_ratio:.1f}% ({threshold_status})"
+            self.unified_status.setText(status_msg)
+            
+        except Exception as e:
+            import traceback
+            QMessageBox.critical(self, "Analysis Error", f"Error generating energy flow analysis:\n{str(e)}\n\n{traceback.format_exc()}")
+            self.unified_status.setText("✗ Error generating analysis")
     
     def show_annual_analysis(self):
         """Generate annual energy analysis with monthly and yearly totals"""
@@ -2651,6 +3083,599 @@ Pricing (incl. VAT):
             import traceback
             QMessageBox.critical(self, "Analysis Error", f"Error generating scenario comparison:\n{str(e)}\n\n{traceback.format_exc()}")
             self.unified_status.setText("✗ Error generating comparison")
+    
+    def _calculate_scenario_data(self):
+        """
+        Helper function to calculate data for all three scenarios
+        Returns dict with all scenario results
+        """
+        household, solar_system, battery_calc = self.get_unified_config()
+        if not household or not solar_system or not battery_calc:
+            return None
+        
+        try:
+            import matplotlib.pyplot as plt
+            from datetime import datetime, timedelta
+            
+            # Get pricing parameters
+            selling_price = float(self.nordpool_price.text()) if hasattr(self, 'nordpool_price') else 0.06
+            transfer_cost = float(self.transfer_cost.text()) if hasattr(self, 'transfer_cost') else 0.04
+            electricity_cost = float(self.electricity_cost.text()) if hasattr(self, 'electricity_cost') else 0.08
+            service_cost = float(self.service_cost.text()) if hasattr(self, 'service_cost') else 0.01
+            vat_rate = float(self.vat_rate.text()) / 100.0 if hasattr(self, 'vat_rate') else 0.21
+            
+            import_rate = (electricity_cost + transfer_cost + service_cost) * (1 + vat_rate)
+            export_rate = selling_price - transfer_cost * (1 + vat_rate)
+            export_rate = max(0, export_rate)
+            
+            year = 2024
+            
+            # Get system costs for ROI calculation
+            pv_cost = float(self.pv_cost.text()) if hasattr(self, 'pv_cost') else solar_system.peak_power_kw * 1000
+            battery_cost = float(self.battery_cost.text()) if hasattr(self, 'battery_cost') else battery_calc.battery_capacity * 500
+            
+            # SCENARIO 1: No PV, No Battery (Baseline)
+            self.unified_status.setText("Calculating scenarios (1/3: Baseline)...")
+            QApplication.processEvents()
+            
+            scenario1_cost = 0.0
+            total_consumption_kwh = 0.0
+            
+            for day_of_year in range(1, 366):
+                date_obj = datetime(year, 1, 1) + timedelta(days=day_of_year - 1)
+                month = date_obj.month
+                day_of_week = date_obj.weekday()
+                is_weekday = day_of_week < 5
+                
+                daily_consumption = self.consumption_generator.get_daily_consumption(
+                    household, month, is_weekday, day_of_week, include_ev=True
+                )
+                total_consumption_kwh += daily_consumption
+                scenario1_cost += daily_consumption * import_rate
+            
+            # SCENARIO 2: PV Only (No Battery)
+            self.unified_status.setText("Calculating scenarios (2/3: PV Only)...")
+            QApplication.processEvents()
+            
+            scenario2_import = 0.0
+            scenario2_export = 0.0
+            scenario2_self_consumption = 0.0
+            
+            for day_of_year in range(1, 366):
+                date_obj = datetime(year, 1, 1) + timedelta(days=day_of_year - 1)
+                month = date_obj.month
+                day_of_week = date_obj.weekday()
+                
+                for hour in range(24):
+                    consumption = self.consumption_generator.get_hourly_consumption(
+                        household, month, day_of_week, hour, include_ev=True
+                    )
+                    generation = self.solar_generator.get_hourly_generation(
+                        solar_system, month, hour
+                    )
+                    
+                    if generation >= consumption:
+                        scenario2_self_consumption += consumption
+                        scenario2_export += (generation - consumption)
+                    else:
+                        scenario2_self_consumption += generation
+                        scenario2_import += (consumption - generation)
+            
+            scenario2_cost = scenario2_import * import_rate - scenario2_export * export_rate
+            
+            # SCENARIO 3: PV + Battery (Full System)
+            self.unified_status.setText("Calculating scenarios (3/3: PV+Battery)...")
+            QApplication.processEvents()
+            
+            scenario3_import = 0.0
+            scenario3_export = 0.0
+            scenario3_self_consumption = 0.0
+            current_soc = battery_calc.battery_capacity * 0.5
+            
+            for day_of_year in range(1, 366):
+                date_obj = datetime(year, 1, 1) + timedelta(days=day_of_year - 1)
+                month = date_obj.month
+                day_of_week = date_obj.weekday()
+                
+                result = battery_calc.simulate_daily_flow(
+                    self.consumption_generator, self.solar_generator,
+                    household, solar_system,
+                    month, day_of_week, initial_soc=current_soc
+                )
+                
+                current_soc = result.hourly_battery_soc[-1]
+                
+                scenario3_import += result.total_grid_import
+                scenario3_export += result.total_grid_export
+                scenario3_self_consumption += result.total_self_consumption
+            
+            scenario3_cost = scenario3_import * import_rate - scenario3_export * export_rate
+            
+            # Calculate derived metrics
+            savings_pv_only = scenario1_cost - scenario2_cost
+            savings_pv_battery = scenario1_cost - scenario3_cost
+            additional_savings_battery = scenario2_cost - scenario3_cost
+            
+            payback_pv_only = pv_cost / savings_pv_only if savings_pv_only > 0 else float('inf')
+            payback_pv_battery = (pv_cost + battery_cost) / savings_pv_battery if savings_pv_battery > 0 else float('inf')
+            
+            ss_pv_only = (scenario2_self_consumption / total_consumption_kwh * 100) if total_consumption_kwh > 0 else 0
+            ss_pv_battery = (scenario3_self_consumption / total_consumption_kwh * 100) if total_consumption_kwh > 0 else 0
+            
+            return {
+                'household': household,
+                'solar_system': solar_system,
+                'battery_calc': battery_calc,
+                'import_rate': import_rate,
+                'export_rate': export_rate,
+                'pv_cost': pv_cost,
+                'battery_cost': battery_cost,
+                'total_consumption_kwh': total_consumption_kwh,
+                # Scenario 1
+                'scenario1_cost': scenario1_cost,
+                # Scenario 2
+                'scenario2_cost': scenario2_cost,
+                'scenario2_import': scenario2_import,
+                'scenario2_export': scenario2_export,
+                'scenario2_self_consumption': scenario2_self_consumption,
+                'ss_pv_only': ss_pv_only,
+                'savings_pv_only': savings_pv_only,
+                'payback_pv_only': payback_pv_only,
+                # Scenario 3
+                'scenario3_cost': scenario3_cost,
+                'scenario3_import': scenario3_import,
+                'scenario3_export': scenario3_export,
+                'scenario3_self_consumption': scenario3_self_consumption,
+                'ss_pv_battery': ss_pv_battery,
+                'savings_pv_battery': savings_pv_battery,
+                'payback_pv_battery': payback_pv_battery,
+                # Battery value
+                'additional_savings_battery': additional_savings_battery,
+            }
+            
+        except Exception as e:
+            import traceback
+            QMessageBox.critical(self, "Data Calculation Error", f"Error calculating scenario data:\n{str(e)}\n\n{traceback.format_exc()}")
+            return None
+    
+    def show_cost_savings_comparison(self):
+        """Show Cost & Savings comparison graph (Split 1/5)"""
+        data = self._calculate_scenario_data()
+        if not data:
+            return
+        
+        try:
+            import matplotlib.pyplot as plt
+            
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+            
+            # Plot 1: Annual Cost Comparison
+            scenarios = ['No PV\nNo Battery', 'PV Only\nNo Battery', 'PV +\nBattery']
+            costs = [data['scenario1_cost'], data['scenario2_cost'], data['scenario3_cost']]
+            colors = ['red', 'orange', 'green']
+            
+            bars = ax1.bar(scenarios, costs, color=colors, alpha=0.7, edgecolor='black', linewidth=2)
+            ax1.set_ylabel('Annual Cost (EUR)', fontsize=12, fontweight='bold')
+            ax1.set_title('Annual Electricity Cost Comparison', fontsize=13, fontweight='bold')
+            ax1.grid(True, alpha=0.3, axis='y')
+            
+            for bar, cost in zip(bars, costs):
+                height = bar.get_height()
+                ax1.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{cost:,.0f} EUR',
+                        ha='center', va='bottom', fontweight='bold', fontsize=11)
+            
+            # Plot 2: Savings Comparison
+            savings_labels = ['PV Only\nvs Baseline', 'PV + Battery\nvs Baseline', 'Battery\nAdded Value']
+            savings_values = [data['savings_pv_only'], data['savings_pv_battery'], data['additional_savings_battery']]
+            colors2 = ['orange', 'green', 'blue']
+            
+            bars2 = ax2.bar(savings_labels, savings_values, color=colors2, alpha=0.7, edgecolor='black', linewidth=2)
+            ax2.set_ylabel('Annual Savings (EUR)', fontsize=12, fontweight='bold')
+            ax2.set_title('Annual Savings Comparison', fontsize=13, fontweight='bold')
+            ax2.grid(True, alpha=0.3, axis='y')
+            
+            for bar, saving in zip(bars2, savings_values):
+                height = bar.get_height()
+                ax2.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{saving:,.0f} EUR',
+                        ha='center', va='bottom', fontweight='bold', fontsize=11)
+            
+            fig.suptitle('Cost & Savings Analysis', fontsize=15, fontweight='bold')
+            plt.tight_layout()
+            fig.show()
+            
+            self.unified_status.setText("✓ Cost & Savings comparison complete")
+            
+        except Exception as e:
+            import traceback
+            QMessageBox.critical(self, "Graph Error", f"Error generating graph:\n{str(e)}\n\n{traceback.format_exc()}")
+            self.unified_status.setText("✗ Error generating graph")
+    
+    def show_selfsuff_payback_comparison(self):
+        """Show Self-Sufficiency & Payback comparison graph (Split 2/5)"""
+        data = self._calculate_scenario_data()
+        if not data:
+            return
+        
+        try:
+            import matplotlib.pyplot as plt
+            
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+            
+            # Plot 1: Self-Sufficiency Comparison
+            ss_labels = ['No PV', 'PV Only', 'PV + Battery']
+            ss_values = [0, data['ss_pv_only'], data['ss_pv_battery']]
+            colors = ['red', 'orange', 'green']
+            
+            bars = ax1.bar(ss_labels, ss_values, color=colors, alpha=0.7, edgecolor='black', linewidth=2)
+            ax1.set_ylabel('Self-Sufficiency (%)', fontsize=12, fontweight='bold')
+            ax1.set_title('Energy Self-Sufficiency', fontsize=13, fontweight='bold')
+            ax1.set_ylim(0, 100)
+            ax1.grid(True, alpha=0.3, axis='y')
+            ax1.axhline(y=100, color='black', linestyle='--', alpha=0.3, label='100% Target')
+            ax1.legend()
+            
+            for bar, ss in zip(bars, ss_values):
+                height = bar.get_height()
+                ax1.text(bar.get_x() + bar.get_width()/2., height + 2,
+                        f'{ss:.1f}%',
+                        ha='center', va='bottom', fontweight='bold', fontsize=11)
+            
+            # Plot 2: Payback Period
+            payback_labels = ['PV Only', 'PV + Battery']
+            payback_values = [
+                data['payback_pv_only'] if data['payback_pv_only'] != float('inf') else 0,
+                data['payback_pv_battery'] if data['payback_pv_battery'] != float('inf') else 0
+            ]
+            colors2 = ['orange', 'green']
+            
+            bars2 = ax2.bar(payback_labels, payback_values, color=colors2, alpha=0.7, edgecolor='black', linewidth=2)
+            ax2.set_ylabel('Years to Payback', fontsize=12, fontweight='bold')
+            ax2.set_title('Investment Payback Period', fontsize=13, fontweight='bold')
+            ax2.grid(True, alpha=0.3, axis='y')
+            
+            for bar, years in zip(bars2, payback_values):
+                if years > 0:
+                    height = bar.get_height()
+                    ax2.text(bar.get_x() + bar.get_width()/2., height,
+                            f'{years:.1f} yrs',
+                            ha='center', va='bottom', fontweight='bold', fontsize=11)
+            
+            fig.suptitle('Self-Sufficiency & Payback Analysis', fontsize=15, fontweight='bold')
+            plt.tight_layout()
+            fig.show()
+            
+            self.unified_status.setText("✓ Self-Sufficiency & Payback comparison complete")
+            
+        except Exception as e:
+            import traceback
+            QMessageBox.critical(self, "Graph Error", f"Error generating graph:\n{str(e)}\n\n{traceback.format_exc()}")
+            self.unified_status.setText("✗ Error generating graph")
+    
+    def show_energyflow_comparison(self):
+        """Show Energy Flow comparison graph (Split 3/5)"""
+        data = self._calculate_scenario_data()
+        if not data:
+            return
+        
+        try:
+            import matplotlib.pyplot as plt
+            import numpy as np
+            
+            fig, ax = plt.subplots(figsize=(12, 7))
+            
+            x_pos = np.arange(3)
+            width = 0.35
+            
+            import_vals = [data['total_consumption_kwh'], data['scenario2_import'], data['scenario3_import']]
+            export_vals = [0, data['scenario2_export'], data['scenario3_export']]
+            
+            bars1 = ax.bar([p - width/2 for p in x_pos], import_vals, width, label='Grid Import', 
+                   color='red', alpha=0.7, edgecolor='black', linewidth=2)
+            bars2 = ax.bar([p + width/2 for p in x_pos], export_vals, width, label='Grid Export', 
+                   color='green', alpha=0.7, edgecolor='black', linewidth=2)
+            
+            # Add value labels
+            for bar in bars1:
+                height = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., height,
+                       f'{height:,.0f}',
+                       ha='center', va='bottom', fontweight='bold', fontsize=10)
+            
+            for bar in bars2:
+                height = bar.get_height()
+                if height > 0:
+                    ax.text(bar.get_x() + bar.get_width()/2., height,
+                           f'{height:,.0f}',
+                           ha='center', va='bottom', fontweight='bold', fontsize=10)
+            
+            ax.set_xlabel('Scenario', fontsize=12, fontweight='bold')
+            ax.set_ylabel('Energy (kWh/year)', fontsize=12, fontweight='bold')
+            ax.set_title('Annual Grid Import vs Export', fontsize=14, fontweight='bold')
+            ax.set_xticks(x_pos)
+            ax.set_xticklabels(['No PV\nNo Battery', 'PV Only\nNo Battery', 'PV + Battery'])
+            ax.legend(fontsize=11)
+            ax.grid(True, alpha=0.3, axis='y')
+            
+            plt.tight_layout()
+            fig.show()
+            
+            self.unified_status.setText("✓ Energy Flow comparison complete")
+            
+        except Exception as e:
+            import traceback
+            QMessageBox.critical(self, "Graph Error", f"Error generating graph:\n{str(e)}\n\n{traceback.format_exc()}")
+            self.unified_status.setText("✗ Error generating graph")
+    
+    def show_cumulative_payback_comparison(self):
+        """Show Cumulative Payback Timeline graph (Split 4/5)"""
+        data = self._calculate_scenario_data()
+        if not data:
+            return
+        
+        try:
+            import matplotlib.pyplot as plt
+            import numpy as np
+            
+            fig = plt.figure(figsize=(16, 10))
+            gs = fig.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0.3)
+            
+            # Main plot: Cumulative costs over time
+            ax1 = fig.add_subplot(gs[0])
+            
+            # Calculate cumulative costs over time (25 years)
+            years = np.array(list(range(0, 26)))
+            
+            # Scenario 1: No PV - just annual costs accumulating
+            cumulative_no_pv = data['scenario1_cost'] * years
+            
+            # Scenario 2: PV Only - upfront cost + annual electricity costs
+            cumulative_pv_only = data['pv_cost'] + data['scenario2_cost'] * years
+            
+            # Scenario 3: PV + Battery - upfront cost + annual electricity costs
+            cumulative_pv_battery = data['pv_cost'] + data['battery_cost'] + data['scenario3_cost'] * years
+            
+            # Plot lines
+            ax1.plot(years, cumulative_no_pv, 'r-', linewidth=3.5, label='No PV (Baseline)', marker='o', markersize=6, markevery=2)
+            ax1.plot(years, cumulative_pv_only, color='orange', linewidth=3.5, label='PV Only', marker='s', markersize=6, markevery=2)
+            ax1.plot(years, cumulative_pv_battery, 'g-', linewidth=3.5, label='PV + Battery', marker='^', markersize=6, markevery=2)
+            
+            # Fill between lines to show savings
+            ax1.fill_between(years, cumulative_no_pv, cumulative_pv_only, alpha=0.2, color='orange', label='PV Savings')
+            ax1.fill_between(years, cumulative_pv_only, cumulative_pv_battery, alpha=0.2, color='blue', label='Battery Added Savings')
+            
+            # Add breakeven points with better annotations
+            if data['payback_pv_only'] < 25:
+                ax1.axvline(x=data['payback_pv_only'], color='orange', linestyle='--', alpha=0.6, linewidth=2.5)
+                # Calculate y position for annotation
+                y_pos_pv = data['pv_cost'] + data['scenario2_cost'] * data['payback_pv_only']
+                ax1.plot(data['payback_pv_only'], y_pos_pv, 'o', color='orange', markersize=12, markeredgecolor='black', markeredgewidth=2)
+                ax1.annotate(f'PV Breakeven\n{data["payback_pv_only"]:.1f} years', 
+                            xy=(data['payback_pv_only'], y_pos_pv),
+                            xytext=(data['payback_pv_only'] + 2, y_pos_pv + max(cumulative_no_pv) * 0.1),
+                            fontsize=10, fontweight='bold',
+                            bbox=dict(boxstyle='round,pad=0.5', facecolor='orange', alpha=0.7, edgecolor='black'),
+                            arrowprops=dict(arrowstyle='->', lw=2, color='orange'))
+            
+            if data['payback_pv_battery'] < 25:
+                ax1.axvline(x=data['payback_pv_battery'], color='green', linestyle='--', alpha=0.6, linewidth=2.5)
+                # Calculate y position for annotation
+                y_pos_battery = data['pv_cost'] + data['battery_cost'] + data['scenario3_cost'] * data['payback_pv_battery']
+                ax1.plot(data['payback_pv_battery'], y_pos_battery, '^', color='green', markersize=12, markeredgecolor='black', markeredgewidth=2)
+                ax1.annotate(f'PV+Battery Breakeven\n{data["payback_pv_battery"]:.1f} years', 
+                            xy=(data['payback_pv_battery'], y_pos_battery),
+                            xytext=(data['payback_pv_battery'] + 2, y_pos_battery - max(cumulative_no_pv) * 0.1),
+                            fontsize=10, fontweight='bold',
+                            bbox=dict(boxstyle='round,pad=0.5', facecolor='green', alpha=0.7, edgecolor='black'),
+                            arrowprops=dict(arrowstyle='->', lw=2, color='green'))
+            
+            ax1.set_xlabel('Years', fontsize=13, fontweight='bold')
+            ax1.set_ylabel('Cumulative Total Cost (EUR)', fontsize=13, fontweight='bold')
+            ax1.set_title('Payback Analysis - Cumulative Cost vs Time Comparison', fontsize=15, fontweight='bold')
+            ax1.legend(loc='upper left', fontsize=11, framealpha=0.9)
+            ax1.grid(True, alpha=0.3, linestyle='--')
+            ax1.set_xlim(0, 25)
+            
+            # Add cost values at key years
+            for year in [5, 10, 15, 20, 25]:
+                idx = year
+                ax1.text(year, cumulative_no_pv[idx], f'{cumulative_no_pv[idx]:,.0f}', 
+                        fontsize=8, ha='center', va='bottom', color='darkred', fontweight='bold')
+            
+            # Bottom plot: Annual savings comparison
+            ax2 = fig.add_subplot(gs[1])
+            
+            # Calculate annual savings for each scenario
+            savings_pv_only = np.array([data['savings_pv_only']] * 26)
+            savings_pv_battery = np.array([data['savings_pv_battery']] * 26)
+            
+            x_pos = np.arange(3)
+            scenarios = ['Baseline\n(No PV)', 'PV Only', 'PV + Battery']
+            annual_costs = [data['scenario1_cost'], data['scenario2_cost'], data['scenario3_cost']]
+            colors_bar = ['red', 'orange', 'green']
+            
+            bars = ax2.bar(x_pos, annual_costs, color=colors_bar, alpha=0.7, edgecolor='black', linewidth=2)
+            
+            # Add value labels on bars
+            for bar, cost in zip(bars, annual_costs):
+                height = bar.get_height()
+                ax2.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{cost:,.0f} EUR/yr',
+                        ha='center', va='bottom', fontweight='bold', fontsize=10)
+            
+            ax2.set_ylabel('Annual Electricity Cost (EUR/year)', fontsize=12, fontweight='bold')
+            ax2.set_title('Annual Operating Costs Comparison', fontsize=13, fontweight='bold')
+            ax2.set_xticks(x_pos)
+            ax2.set_xticklabels(scenarios)
+            ax2.grid(True, alpha=0.3, axis='y', linestyle='--')
+            
+            # Add summary text box
+            total_savings_25yr_pv = cumulative_no_pv[-1] - cumulative_pv_only[-1]
+            total_savings_25yr_battery = cumulative_no_pv[-1] - cumulative_pv_battery[-1]
+            
+            summary_text = f"""25-YEAR SUMMARY
+            
+PV Only:
+  • Total Investment: {data['pv_cost']:,.0f} EUR
+  • Total Savings: {total_savings_25yr_pv:,.0f} EUR
+  • Net Benefit: {total_savings_25yr_pv - data['pv_cost']:,.0f} EUR
+  • ROI: {(total_savings_25yr_pv / data['pv_cost'] - 1) * 100:.1f}%
+
+PV + Battery:
+  • Total Investment: {data['pv_cost'] + data['battery_cost']:,.0f} EUR
+  • Total Savings: {total_savings_25yr_battery:,.0f} EUR
+  • Net Benefit: {total_savings_25yr_battery - data['pv_cost'] - data['battery_cost']:,.0f} EUR
+  • ROI: {(total_savings_25yr_battery / (data['pv_cost'] + data['battery_cost']) - 1) * 100:.1f}%
+            """
+            
+            ax1.text(0.98, 0.02, summary_text,
+                   transform=ax1.transAxes, fontsize=9, verticalalignment='bottom',
+                   horizontalalignment='right', family='monospace',
+                   bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.9, edgecolor='black', linewidth=2))
+            
+            fig.suptitle('Complete Payback & ROI Analysis - All Scenarios', fontsize=16, fontweight='bold', y=0.995)
+            
+            plt.tight_layout()
+            fig.show()
+            
+            self.unified_status.setText("✓ Cumulative Payback comparison complete")
+            
+        except Exception as e:
+            import traceback
+            QMessageBox.critical(self, "Graph Error", f"Error generating graph:\n{str(e)}\n\n{traceback.format_exc()}")
+            self.unified_status.setText("✗ Error generating graph")
+    
+    def show_summary_comparison(self):
+        """Show detailed summary report (Split 5/5)"""
+        data = self._calculate_scenario_data()
+        if not data:
+            return
+        
+        try:
+            import matplotlib.pyplot as plt
+            
+            fig, ax = plt.subplots(figsize=(12, 10))
+            ax.axis('off')
+            
+            battery_payback = data['battery_cost'] / data['additional_savings_battery'] if data['additional_savings_battery'] > 0 else float('inf')
+            
+            summary_text = f"""
+SCENARIO COMPARISON SUMMARY
+
+═══════════════════════════════════════════════════════════════════════
+
+SCENARIO 1: No PV, No Battery (BASELINE)
+  Annual Cost:                 {data['scenario1_cost']:>12,.2f} EUR
+  Self-Sufficiency:            {0:>12.1f} %
+  Grid Import:                 {data['total_consumption_kwh']:>12,.0f} kWh
+  Grid Export:                 {0:>12,.0f} kWh
+
+───────────────────────────────────────────────────────────────────────
+
+SCENARIO 2: PV Only (No Battery)
+  Annual Cost:                 {data['scenario2_cost']:>12,.2f} EUR
+  Annual Savings:              {data['savings_pv_only']:>12,.2f} EUR
+  Self-Sufficiency:            {data['ss_pv_only']:>12.1f} %
+  Grid Import:                 {data['scenario2_import']:>12,.0f} kWh
+  Grid Export:                 {data['scenario2_export']:>12,.0f} kWh
+  
+  Investment Required:         {data['pv_cost']:>12,.2f} EUR
+  Simple Payback Period:       {data['payback_pv_only']:>12.1f} years
+
+───────────────────────────────────────────────────────────────────────
+
+SCENARIO 3: PV + Battery (FULL SYSTEM)
+  Annual Cost:                 {data['scenario3_cost']:>12,.2f} EUR
+  Annual Savings:              {data['savings_pv_battery']:>12,.2f} EUR
+  Self-Sufficiency:            {data['ss_pv_battery']:>12.1f} %
+  Grid Import:                 {data['scenario3_import']:>12,.0f} kWh
+  Grid Export:                 {data['scenario3_export']:>12,.0f} kWh
+  
+  Investment Required:         {data['pv_cost'] + data['battery_cost']:>12,.2f} EUR
+  Simple Payback Period:       {data['payback_pv_battery']:>12.1f} years
+
+───────────────────────────────────────────────────────────────────────
+
+BATTERY VALUE-ADD ANALYSIS
+  Additional Annual Savings:   {data['additional_savings_battery']:>12,.2f} EUR/year
+  Battery Investment Cost:     {data['battery_cost']:>12,.2f} EUR
+  Battery-Only Payback:        {battery_payback:>12.1f} years
+  
+  Self-Sufficiency Gain:       {data['ss_pv_battery'] - data['ss_pv_only']:>12.1f} percentage points
+  Grid Import Reduction:       {data['scenario2_import'] - data['scenario3_import']:>12,.0f} kWh/year
+
+═══════════════════════════════════════════════════════════════════════
+
+SYSTEM CONFIGURATION
+  PV System Size:              {data['solar_system'].peak_power_kw:>12.1f} kWp
+  Battery Capacity:            {data['battery_calc'].battery_capacity:>12.1f} kWh
+  Annual Consumption:          {data['total_consumption_kwh']:>12,.0f} kWh
+  Location:                    {data['solar_system'].location.name}
+
+PRICING (including VAT)
+  Grid Import Rate:            {data['import_rate']:>12.4f} EUR/kWh
+  Grid Export Rate:            {data['export_rate']:>12.4f} EUR/kWh
+
+═══════════════════════════════════════════════════════════════════════
+
+RECOMMENDATIONS
+
+"""
+            
+            # Add recommendations
+            if data['payback_pv_only'] < 10:
+                summary_text += "  ✓ PV system: HIGHLY RECOMMENDED (fast payback)\n"
+            elif data['payback_pv_only'] < 15:
+                summary_text += "  ✓ PV system: RECOMMENDED (reasonable payback)\n"
+            else:
+                summary_text += "  ⚠ PV system: Review configuration (long payback)\n"
+            
+            if battery_payback < 12:
+                summary_text += "  ✓ Battery storage: RECOMMENDED (good ROI)\n"
+            elif battery_payback < 15:
+                summary_text += "  ⚠ Battery storage: MARGINAL (consider carefully)\n"
+            else:
+                summary_text += "  ✗ Battery storage: NOT RECOMMENDED (poor ROI)\n"
+            
+            summary_text += f"\n  Best Option: "
+            if data['payback_pv_battery'] < data['payback_pv_only'] * 1.3:
+                summary_text += "PV + Battery (Full System)\n"
+            else:
+                summary_text += "PV Only (Add battery later if prices drop)\n"
+            
+            ax.text(0.05, 0.95, summary_text, transform=ax.transAxes,
+                   fontsize=10, verticalalignment='top', family='monospace',
+                   bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.5))
+            
+            fig.suptitle('Detailed Scenario Comparison Report', fontsize=16, fontweight='bold')
+            
+            plt.tight_layout()
+            fig.show()
+            
+            self.unified_status.setText("✓ Summary report complete")
+            
+        except Exception as e:
+            import traceback
+            QMessageBox.critical(self, "Report Error", f"Error generating report:\n{str(e)}\n\n{traceback.format_exc()}")
+            self.unified_status.setText("✗ Error generating report")
+    
+    def show_system_optimization(self):
+        """Show system optimization tool (placeholder for future implementation)"""
+        QMessageBox.information(
+            self,
+            "Feature Coming Soon",
+            "System Optimization Feature\n\n"
+            "This feature will automatically test different PV and battery configurations\n"
+            "to find the optimal system size based on:\n\n"
+            "• Best ROI (Return on Investment)\n"
+            "• Fastest Payback Period\n"
+            "• Highest Self-Sufficiency\n"
+            "• Best Cost/Benefit Ratio\n\n"
+            "Implementation planned for next version.\n\n"
+            "For now, manually adjust PV size and battery capacity in the\n"
+            "Input Parameters tab to compare different configurations."
+        )
     
     def get_battery_soc_for_date(self, year: int, day_of_year: int, 
                                   household, solar_system, battery_calc) -> float:

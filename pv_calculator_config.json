@@ -13,7 +13,7 @@
     },
     "pv": {
         "enabled": true,
-        "size": "11.2",
+        "size": "9",
         "cost": "2500",
         "location": "riga_latvia"
     },
@@ -27,11 +27,11 @@
     },
     "ev": {
         "enabled": true,
-        "make": "Hyundai",
-        "model": "IONIQ 5",
-        "configuration": "Long Range AWD (2024, 72 kWh)",
-        "consumption": "17.5",
-        "weekly_km": "350.0",
+        "make": "Opel",
+        "model": "Mokka-e",
+        "configuration": "Standard (2024, 50 kWh)",
+        "consumption": "16.5",
+        "weekly_km": "315.0",
         "charger_power": "11",
         "charging_start": 18
     }
