@@ -31,6 +31,7 @@ except ImportError:
 # Try to import consumption pattern generator (Version 2)
 try:
     from PV_consumption_generator import ConsumptionPatternGenerator, HouseholdProfile, EVConsumptionProfile
+    from PV_consumption_graphs import ConsumptionGraphGenerator
     CONSUMPTION_V2_AVAILABLE = True
 except ImportError:
     CONSUMPTION_V2_AVAILABLE = False
@@ -40,6 +41,7 @@ except ImportError:
 # Try to import solar generation calculator (Version 2)
 try:
     from PV_solar_generator import SolarGenerationCalculator, SolarSystemProfile, LOCATIONS
+    from PV_solar_graphs import SolarComparisonGraphs
     SOLAR_V2_AVAILABLE = True
 except ImportError:
     SOLAR_V2_AVAILABLE = False
@@ -61,8 +63,9 @@ class PVCalculatorGUI(QMainWindow):
         self.setWindowTitle("PV System Feasibility Calculator")
         self.resize(900, 800)
         
-        # Initialize cache for enhanced features
+        # Initialize caches for enhanced features
         self.enhanced_solar_cache = None
+        self.enhanced_ev_cache = None
         
         # Central widget and layout
         central_widget = QWidget()
@@ -359,14 +362,13 @@ class PVCalculatorGUI(QMainWindow):
         
         ev_form = QFormLayout()
         
-        # Initialize EV database from Google Sheets (real-world test data)
+        # Initialize structured EV database
         try:
-            from PV_ev_database_google import GoogleSheetsEVDatabase
-            self.ev_database = GoogleSheetsEVDatabase()
-            print(f"✅ EV Database loaded: {len(self.ev_database.get_makes())} manufacturers with real-world test data")
-        except ImportError as e:
+            from PV_ev_database_structured import StructuredEVDatabase
+            self.ev_database = StructuredEVDatabase()
+        except ImportError:
             self.ev_database = None
-            print(f"Warning: Google Sheets EV database not available: {e}")
+            print("Warning: Structured EV database not available")
         
         # Car Make
         from PyQt5.QtWidgets import QComboBox
@@ -450,8 +452,7 @@ class PVCalculatorGUI(QMainWindow):
         self.ev_charger_power.textChanged.connect(self.update_ev_charging_duration)
         self.ev_charging_start.valueChanged.connect(self.update_ev_charging_duration)
         
-        ev_info = QLabel("💡 Select your car to auto-fill consumption. Charging starts at selected time and continues until daily needs are met.\n"
-                               "🌐 Real-world test data from Google Sheets - actual consumption at different speeds & temperatures!")
+        ev_info = QLabel("💡 Select your car to auto-fill consumption. Charging starts at selected time and continues until daily needs are met.")
         ev_info.setWordWrap(True)
         ev_info.setStyleSheet("color: blue; font-style: italic; font-size: 9pt;")
         ev_layout.addWidget(ev_info)
@@ -961,6 +962,774 @@ class PVCalculatorGUI(QMainWindow):
                 f"Error fetching enhanced solar data:\n{str(e)}\n\n{traceback.format_exc()}"
             )
             self.solar_data_source.setText("📊 Using: Built-in solar model (error occurred)")
+    
+    def setup_results_tab(self):
+        """Setup the results display tab"""
+        layout = QVBoxLayout(self.tab_results)
+        
+        # Results text area
+        self.results_text = QTextEdit()
+        self.results_text.setReadOnly(True)
+        self.results_text.setFont(QFont("Courier", 9))
+        layout.addWidget(self.results_text)
+        
+        # Export button
+        export_layout = QHBoxLayout()
+        export_btn = QPushButton("Export to Text File")
+        export_btn.clicked.connect(self.export_results)
+        export_layout.addWidget(export_btn)
+        export_layout.addStretch()
+        
+        layout.addLayout(export_layout)
+    
+    def setup_comparison_tab(self):
+        """Setup the scenario comparison tab"""
+        layout = QVBoxLayout(self.tab_comparison)
+        
+        # Info text
+        info_label = QLabel("Compare different scenarios and view seasonal analysis.")
+        info_label.setFont(QFont("Arial", 10))
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+        
+        # Compare button
+        compare_btn = QPushButton("Run Scenario Comparison")
+        compare_btn.setMinimumHeight(40)
+        compare_btn.setStyleSheet("font-size: 12pt; font-weight: bold;")
+        compare_btn.clicked.connect(self.run_scenario_comparison)
+        layout.addWidget(compare_btn)
+        
+        # Comparison results text area
+        self.comparison_text = QTextEdit()
+        self.comparison_text.setReadOnly(True)
+        self.comparison_text.setFont(QFont("Courier", 9))
+        layout.addWidget(self.comparison_text)
+        
+        # Export button
+        export_layout = QHBoxLayout()
+        export_btn = QPushButton("Export Comparison to Text File")
+        export_btn.clicked.connect(self.export_comparison)
+        export_layout.addWidget(export_btn)
+        export_layout.addStretch()
+        
+        layout.addLayout(export_layout)
+    
+    def setup_graphs_tab(self):
+        """Setup the graphs tab"""
+        layout = QVBoxLayout(self.tab_graphs)
+        
+        if not GRAPHS_AVAILABLE:
+            warning_label = QLabel("Graphing functionality not available.\n\n"
+                                          "Please install required packages:\n"
+                                  "pip install matplotlib numpy")
+            warning_label.setFont(QFont("Arial", 12))
+            warning_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(warning_label)
+            return
+        
+        # Info text
+        info_text = ("Click 'Generate Graphs' to create visual analysis of your PV system.\n"
+                    "Graphs will be displayed in separate windows and saved as PNG files.")
+        info_label = QLabel(info_text)
+        info_label.setFont(QFont("Arial", 10))
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+        
+        # Buttons frame
+        button_group = QGroupBox("Available Graphs")
+        button_layout = QVBoxLayout()
+        button_group.setLayout(button_layout)
+        
+        # Week selector for weekly analysis
+        week_selector_layout = QHBoxLayout()
+        week_label = QLabel("Select Week of Year (1-52):")
+        week_selector_layout.addWidget(week_label)
+        
+        self.week_spinbox = QSpinBox()
+        self.week_spinbox.setMinimum(1)
+        self.week_spinbox.setMaximum(52)
+        self.week_spinbox.setValue(1)
+        self.week_spinbox.setToolTip("Week 1 = Jan 1-7, Week 26 = Late June, Week 52 = Late December")
+        week_selector_layout.addWidget(self.week_spinbox)
+        week_selector_layout.addStretch()
+        
+        button_layout.addLayout(week_selector_layout)
+        
+        graphs = [
+            ("Weekly Energy Balance", "⭐ NEW! Hourly analysis for selected week showing day-wise patterns", self.show_weekly_graph),
+            ("Break-Even Analysis", "Shows when your investment pays for itself", self.show_breakeven_graph),
+            ("Cost Comparison", "Compare annual costs across scenarios", self.show_cost_comparison_graph),
+            ("Energy Flow", "Visualize daily energy production and consumption", self.show_energy_flow_graph),
+            ("ROI Comparison", "Compare return on investment metrics", self.show_roi_graph),
+            ("Monthly Seasonal Analysis", "View year-round PV generation vs consumption patterns", self.show_seasonal_graph),
+            ("Monthly Revenue Offsetting", "See how summer revenue offsets winter costs", self.show_revenue_offsetting_graph),
+            ("Generate All Graphs", "Create and save all graphs at once", self.generate_all_graphs)
+        ]
+        
+        for name, description, command in graphs:
+            row_layout = QHBoxLayout()
+            
+            btn = QPushButton(name)
+            btn.setMinimumWidth(200)
+            btn.clicked.connect(command)
+            row_layout.addWidget(btn)
+            
+            desc_label = QLabel(description)
+            desc_label.setFont(QFont("Arial", 9))
+            row_layout.addWidget(desc_label)
+            row_layout.addStretch()
+            
+            button_layout.addLayout(row_layout)
+        
+        layout.addWidget(button_group)
+        
+        # Status
+        self.graph_status = QLabel("")
+        self.graph_status.setFont(QFont("Arial", 9))
+        self.graph_status.setStyleSheet("font-style: italic;")
+        layout.addWidget(self.graph_status)
+        
+        layout.addStretch()
+    
+    def setup_consumption_v2_tab(self):
+        """Setup the consumption pattern generation tab (Version 2)"""
+        layout = QVBoxLayout(self.tab_consumption_v2)
+        
+        if not CONSUMPTION_V2_AVAILABLE:
+            warning_label = QLabel("⚠️ Consumption Pattern Generator V2 not available.\n\n"
+                                  "The module files may be missing or there was an import error.\n"
+                                  "Please ensure PV_consumption_generator.py and PV_consumption_graphs.py are in the same directory.")
+            warning_label.setFont(QFont("Arial", 12))
+            warning_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(warning_label)
+            return
+        
+        # Header
+        header_label = QLabel("⭐ Consumption Pattern Generator - Version 2")
+        header_label.setFont(QFont("Arial", 14, QFont.Bold))
+        header_label.setStyleSheet("color: darkblue; padding: 10px;")
+        layout.addWidget(header_label)
+        
+        # Info text
+        info_text = QLabel(
+            "Generate and visualize realistic daily power consumption patterns with:\n"
+            "• Gaussian monthly distribution (higher consumption in winter)\n"
+            "• Weekday patterns with baseline during day and evening peaks\n"
+            "• Weekend vs weekday differences\n"
+            "• Multiple household types (working family, retired, home office, etc.)"
+        )
+        info_text.setWordWrap(True)
+        info_text.setFont(QFont("Arial", 10))
+        info_text.setStyleSheet("background-color: #e8f4f8; padding: 10px; border-radius: 5px;")
+        layout.addWidget(info_text)
+        
+        # Scroll area for controls
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        scroll.setWidget(container)
+        
+        # Pattern Selection Group
+        pattern_group = QGroupBox("Select Consumption Pattern")
+        pattern_layout = QVBoxLayout()
+        pattern_group.setLayout(pattern_layout)
+        
+        from PyQt5.QtWidgets import QComboBox, QTextBrowser
+        
+        self.pattern_combo = QComboBox()
+        if self.consumption_generator:
+            patterns = self.consumption_generator.get_available_patterns()
+            for pattern in patterns:
+                info = self.consumption_generator.get_pattern_info(pattern)
+                self.pattern_combo.addItem(info['name'], pattern)
+        
+        pattern_layout.addWidget(QLabel("Pattern Type:"))
+        pattern_layout.addWidget(self.pattern_combo)
+        
+        # Pattern description
+        self.pattern_description = QTextBrowser()
+        self.pattern_description.setMaximumHeight(80)
+        self.pattern_description.setStyleSheet("background-color: #fffacd; padding: 5px;")
+        pattern_layout.addWidget(QLabel("Description:"))
+        pattern_layout.addWidget(self.pattern_description)
+        
+        # Update description when pattern changes
+        self.pattern_combo.currentIndexChanged.connect(self.update_pattern_description)
+        self.update_pattern_description()
+        
+        container_layout.addWidget(pattern_group)
+        
+        # Parameters Group
+        params_group = QGroupBox("Pattern Parameters")
+        params_layout = QFormLayout()
+        params_group.setLayout(params_layout)
+        
+        self.v2_annual_consumption = QLineEdit("6000")
+        params_layout.addRow("Annual Consumption (kWh):", self.v2_annual_consumption)
+        
+        from PyQt5.QtWidgets import QSlider
+        
+        # Seasonal strength slider
+        seasonal_layout = QHBoxLayout()
+        self.v2_seasonal_strength = QSlider(Qt.Horizontal)
+        self.v2_seasonal_strength.setMinimum(0)
+        self.v2_seasonal_strength.setMaximum(50)  # Max 0.5 instead of 1.0
+        self.v2_seasonal_strength.setValue(20)  # Default 0.2 (realistic)
+        self.v2_seasonal_strength.setTickPosition(QSlider.TicksBelow)
+        self.v2_seasonal_strength.setTickInterval(5)
+        seasonal_layout.addWidget(self.v2_seasonal_strength)
+        
+        self.v2_seasonal_label = QLabel("0.2")
+        self.v2_seasonal_label.setMinimumWidth(50)
+        seasonal_layout.addWidget(self.v2_seasonal_label)
+        
+        self.v2_seasonal_strength.valueChanged.connect(
+            lambda v: self.v2_seasonal_label.setText(f"{v/100:.2f}")
+        )
+        
+        # Add helpful hint
+        seasonal_hint = QLabel("(0.1=minimal, 0.2=typical, 0.3=high heating)")
+        seasonal_hint.setStyleSheet("color: gray; font-style: italic; font-size: 8pt;")
+        seasonal_layout.addWidget(seasonal_hint)
+        
+        params_layout.addRow("Seasonal Variation:", seasonal_layout)
+        
+        # Peak hour selector
+        self.v2_peak_hour = QSpinBox()
+        self.v2_peak_hour.setMinimum(0)
+        self.v2_peak_hour.setMaximum(23)
+        self.v2_peak_hour.setValue(19)
+        params_layout.addRow("Evening Peak Hour (0-23):", self.v2_peak_hour)
+        
+        # Month selector for heatmap
+        self.v2_heatmap_month = QComboBox()
+        months = ['January', 'February', 'March', 'April', 'May', 'June',
+                 'July', 'August', 'September', 'October', 'November', 'December']
+        for i, month in enumerate(months, 1):
+            self.v2_heatmap_month.addItem(month, i)
+        params_layout.addRow("Month for Heatmap:", self.v2_heatmap_month)
+        
+        container_layout.addWidget(params_group)
+        
+        # Graph Selection Group
+        graphs_group = QGroupBox("Available Visualizations")
+        graphs_layout = QVBoxLayout()
+        graphs_group.setLayout(graphs_layout)
+        
+        graphs = [
+            ("Daily Pattern Comparison", "Compare weekday vs weekend patterns for winter and summer", 
+             self.show_v2_daily_comparison),
+            ("Seasonal Variation", "View Gaussian seasonal curve and monthly consumption", 
+             self.show_v2_seasonal),
+            ("Weekly Heatmap", "24h x 7 days heatmap of consumption patterns", 
+             self.show_v2_heatmap),
+            ("Pattern Type Comparison", "Compare different household pattern types", 
+             self.show_v2_pattern_comparison),
+            ("Annual Overview", "Comprehensive annual consumption analysis", 
+             self.show_v2_annual_overview),
+            ("Generate All V2 Graphs", "Create and save all consumption pattern graphs", 
+             self.generate_all_v2_graphs)
+        ]
+        
+        for name, description, command in graphs:
+            row_layout = QHBoxLayout()
+            
+            btn = QPushButton(name)
+            btn.setMinimumWidth(200)
+            btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 8px;")
+            btn.clicked.connect(command)
+            row_layout.addWidget(btn)
+            
+            desc_label = QLabel(description)
+            desc_label.setFont(QFont("Arial", 9))
+            desc_label.setStyleSheet("font-style: italic;")
+            row_layout.addWidget(desc_label)
+            row_layout.addStretch()
+            
+            graphs_layout.addLayout(row_layout)
+        
+        container_layout.addWidget(graphs_group)
+        container_layout.addStretch()
+        
+        layout.addWidget(scroll)
+        
+        # Status label
+        self.v2_status = QLabel("")
+        self.v2_status.setFont(QFont("Arial", 9))
+        self.v2_status.setStyleSheet("font-style: italic; color: darkgreen;")
+        layout.addWidget(self.v2_status)
+    
+    def update_pattern_description(self):
+        """Update the pattern description when selection changes"""
+        if not self.consumption_generator:
+            return
+        
+        pattern_type = self.pattern_combo.currentData()
+        info = self.consumption_generator.get_pattern_info(pattern_type)
+        
+        if info:
+            self.pattern_description.setHtml(
+                f"<b>{info['name']}</b><br>"
+                f"{info['description']}"
+            )
+    
+    def get_v2_profile(self) -> HouseholdProfile:
+        """Create household profile from V2 inputs"""
+        if not self.consumption_generator:
+            return None
+        
+        try:
+            pattern_type = self.pattern_combo.currentData()
+            annual_consumption = float(self.v2_annual_consumption.text())
+            seasonal_strength = self.v2_seasonal_strength.value() / 100.0
+            peak_hour = self.v2_peak_hour.value()
+            
+            profile = self.consumption_generator.create_household_profile(
+                name=self.pattern_combo.currentText(),
+                annual_consumption_kwh=annual_consumption,
+                pattern_type=pattern_type,
+                seasonal_strength=seasonal_strength,
+                peak_hour=peak_hour
+            )
+            
+            # Add EV profile if available and enabled (from input parameters tab)
+            if hasattr(self, 'current_ev_consumption_profile') and self.current_ev_consumption_profile:
+                profile.ev_profile = self.current_ev_consumption_profile
+            
+            return profile
+        except ValueError as e:
+            QMessageBox.critical(self, "Input Error", 
+                               f"Invalid input value: {str(e)}")
+            return None
+    
+    def show_v2_daily_comparison(self):
+        """Show daily pattern comparison graph"""
+        if not CONSUMPTION_V2_AVAILABLE:
+            return
+        
+        profile = self.get_v2_profile()
+        if not profile:
+            return
+        
+        self.v2_status.setText("Generating daily pattern comparison...")
+        QApplication.processEvents()
+        
+        try:
+            graph_gen = ConsumptionGraphGenerator(self.consumption_generator)
+            graph_gen.plot_daily_pattern_comparison(profile, show=True)
+            self.v2_status.setText("✓ Daily pattern comparison graph displayed")
+        except Exception as e:
+            QMessageBox.critical(self, "Graph Error", f"Error generating graph: {str(e)}")
+            self.v2_status.setText("✗ Error generating graph")
+    
+    def show_v2_seasonal(self):
+        """Show seasonal variation graph"""
+        if not CONSUMPTION_V2_AVAILABLE:
+            return
+        
+        profile = self.get_v2_profile()
+        if not profile:
+            return
+        
+        self.v2_status.setText("Generating seasonal variation graph...")
+        QApplication.processEvents()
+        
+        try:
+            graph_gen = ConsumptionGraphGenerator(self.consumption_generator)
+            graph_gen.plot_seasonal_variation(profile, show=True)
+            self.v2_status.setText("✓ Seasonal variation graph displayed")
+        except Exception as e:
+            QMessageBox.critical(self, "Graph Error", f"Error generating graph: {str(e)}")
+            self.v2_status.setText("✗ Error generating graph")
+    
+    def show_v2_heatmap(self):
+        """Show weekly heatmap graph"""
+        if not CONSUMPTION_V2_AVAILABLE:
+            return
+        
+        profile = self.get_v2_profile()
+        if not profile:
+            return
+        
+        month = self.v2_heatmap_month.currentData()
+        
+        self.v2_status.setText(f"Generating weekly heatmap for {self.v2_heatmap_month.currentText()}...")
+        QApplication.processEvents()
+        
+        try:
+            graph_gen = ConsumptionGraphGenerator(self.consumption_generator)
+            graph_gen.plot_weekly_heatmap(profile, month=month, show=True)
+            self.v2_status.setText("✓ Weekly heatmap displayed")
+        except Exception as e:
+            QMessageBox.critical(self, "Graph Error", f"Error generating graph: {str(e)}")
+            self.v2_status.setText("✗ Error generating graph")
+    
+    def show_v2_pattern_comparison(self):
+        """Show pattern comparison graph"""
+        if not CONSUMPTION_V2_AVAILABLE:
+            return
+        
+        try:
+            annual_consumption = float(self.v2_annual_consumption.text())
+        except ValueError:
+            QMessageBox.critical(self, "Input Error", "Invalid annual consumption value")
+            return
+        
+        self.v2_status.setText("Generating pattern comparison...")
+        QApplication.processEvents()
+        
+        try:
+            graph_gen = ConsumptionGraphGenerator(self.consumption_generator)
+            patterns = ['working_family', 'home_office', 'retired', 'student']
+            graph_gen.plot_pattern_comparison(patterns, annual_consumption=annual_consumption, show=True)
+            self.v2_status.setText("✓ Pattern comparison displayed")
+        except Exception as e:
+            QMessageBox.critical(self, "Graph Error", f"Error generating graph: {str(e)}")
+            self.v2_status.setText("✗ Error generating graph")
+    
+    def show_v2_annual_overview(self):
+        """Show annual overview graph"""
+        if not CONSUMPTION_V2_AVAILABLE:
+            return
+        
+        profile = self.get_v2_profile()
+        if not profile:
+            return
+        
+        self.v2_status.setText("Generating annual overview (this may take a moment)...")
+        QApplication.processEvents()
+        
+        try:
+            graph_gen = ConsumptionGraphGenerator(self.consumption_generator)
+            graph_gen.plot_annual_overview(profile, show=True)
+            self.v2_status.setText("✓ Annual overview displayed")
+        except Exception as e:
+            QMessageBox.critical(self, "Graph Error", f"Error generating graph: {str(e)}")
+            self.v2_status.setText("✗ Error generating graph")
+    
+    def generate_all_v2_graphs(self):
+        """Generate and save all V2 consumption pattern graphs"""
+        if not CONSUMPTION_V2_AVAILABLE:
+            return
+        
+        profile = self.get_v2_profile()
+        if not profile:
+            return
+        
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        self.v2_status.setText("Generating all V2 graphs (this will take a moment)...")
+        QApplication.processEvents()
+        
+        try:
+            graph_gen = ConsumptionGraphGenerator(self.consumption_generator)
+            month = self.v2_heatmap_month.currentData()
+            annual_consumption = float(self.v2_annual_consumption.text())
+            
+            # Generate all graphs with save paths
+            graph_gen.plot_daily_pattern_comparison(
+                profile, 
+                save_path=f"Consumption_V2_daily_comparison_{timestamp}.png",
+                show=False
+            )
+            
+            graph_gen.plot_seasonal_variation(
+                profile,
+                save_path=f"Consumption_V2_seasonal_{timestamp}.png",
+                show=False
+            )
+            
+            graph_gen.plot_weekly_heatmap(
+                profile,
+                month=month,
+                save_path=f"Consumption_V2_heatmap_{timestamp}.png",
+                show=False
+            )
+            
+            patterns = ['working_family', 'home_office', 'retired', 'student']
+            graph_gen.plot_pattern_comparison(
+                patterns,
+                annual_consumption=annual_consumption,
+                save_path=f"Consumption_V2_pattern_comparison_{timestamp}.png",
+                show=False
+            )
+            
+            graph_gen.plot_annual_overview(
+                profile,
+                save_path=f"Consumption_V2_annual_overview_{timestamp}.png",
+                show=True  # Show the last one
+            )
+            
+            self.v2_status.setText(f"✓ All V2 graphs generated and saved with timestamp {timestamp}")
+            QMessageBox.information(self, "Success", 
+                                  f"All consumption pattern graphs have been generated and saved!\n\n"
+                                  f"Files saved with timestamp: {timestamp}")
+        
+        except Exception as e:
+            QMessageBox.critical(self, "Graph Error", f"Error generating graphs: {str(e)}")
+            self.v2_status.setText("✗ Error generating graphs")
+    
+    def setup_solar_v2_tab(self):
+        """Setup the solar generation tab (Version 2)"""
+        layout = QVBoxLayout(self.tab_solar_v2)
+        
+        if not SOLAR_V2_AVAILABLE:
+            warning_label = QLabel("⚠️ Solar Generation Calculator V2 not available.\n\n"
+                                  "The module files may be missing or there was an import error.\n"
+                                  "Please ensure PV_solar_generator.py and PV_solar_graphs.py are in the same directory.")
+            warning_label.setFont(QFont("Arial", 12))
+            warning_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(warning_label)
+            return
+        
+        # Header
+        header_label = QLabel("⭐ Solar Generation Calculator - Version 2")
+        header_label.setFont(QFont("Arial", 14, QFont.Bold))
+        header_label.setStyleSheet("color: darkorange; padding: 10px;")
+        layout.addWidget(header_label)
+        
+        # Info text
+        info_text = QLabel(
+            "Generate and visualize solar PV generation patterns with:\n"
+            "• Location-based irradiance (10 European cities)\n"
+            "• Realistic hourly generation curves\n"
+            "• Comparison with consumption patterns\n"
+            "• Excess/deficit calculation for battery sizing"
+        )
+        info_text.setWordWrap(True)
+        info_text.setFont(QFont("Arial", 10))
+        info_text.setStyleSheet("background-color: #fff8dc; padding: 10px; border-radius: 5px;")
+        layout.addWidget(info_text)
+        
+        # Scroll area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        scroll.setWidget(container)
+        
+        # Solar System Parameters
+        from PyQt5.QtWidgets import QComboBox, QDoubleSpinBox
+        
+        solar_group = QGroupBox("Solar System Configuration")
+        solar_layout = QFormLayout()
+        solar_group.setLayout(solar_layout)
+        
+        # System size
+        self.solar_system_size = QDoubleSpinBox()
+        self.solar_system_size.setMinimum(1.0)
+        self.solar_system_size.setMaximum(100.0)
+        self.solar_system_size.setValue(5.0)
+        self.solar_system_size.setSuffix(" kWp")
+        self.solar_system_size.setDecimals(1)
+        solar_layout.addRow("System Size:", self.solar_system_size)
+        
+        # Location selector
+        self.solar_location = QComboBox()
+        for key, loc in LOCATIONS.items():
+            self.solar_location.addItem(f"{loc.name} ({loc.avg_daily_irradiance} kWh/m²/day)", key)
+        solar_layout.addRow("Location:", self.solar_location)
+        
+        # Tilt angle
+        self.solar_tilt = QDoubleSpinBox()
+        self.solar_tilt.setMinimum(0)
+        self.solar_tilt.setMaximum(90)
+        self.solar_tilt.setValue(35)
+        self.solar_tilt.setSuffix("°")
+        solar_layout.addRow("Panel Tilt Angle:", self.solar_tilt)
+        
+        # System efficiency
+        self.solar_efficiency = QDoubleSpinBox()
+        self.solar_efficiency.setMinimum(0.5)
+        self.solar_efficiency.setMaximum(1.0)
+        self.solar_efficiency.setValue(0.85)
+        self.solar_efficiency.setSingleStep(0.01)
+        solar_layout.addRow("System Efficiency:", self.solar_efficiency)
+        
+        container_layout.addWidget(solar_group)
+        
+        # Comparison with Consumption
+        comparison_group = QGroupBox("Compare with Consumption (Optional)")
+        comparison_layout = QFormLayout()
+        comparison_group.setLayout(comparison_layout)
+        
+        self.solar_compare_enabled = QCheckBox("Enable comparison with consumption patterns")
+        self.solar_compare_enabled.setChecked(True)
+        comparison_layout.addRow(self.solar_compare_enabled)
+        
+        # Link to consumption tab
+        comparison_hint = QLabel("Uses settings from 'Consumption Patterns V2' tab")
+        comparison_hint.setStyleSheet("color: gray; font-style: italic; font-size: 9pt;")
+        comparison_layout.addRow(comparison_hint)
+        
+        container_layout.addWidget(comparison_group)
+        
+        # Available Graphs
+        graphs_group = QGroupBox("Available Visualizations")
+        graphs_layout = QVBoxLayout()
+        graphs_group.setLayout(graphs_layout)
+        
+        graphs = [
+            ("Daily Generation Profile", "Hourly generation curve for selected month", 
+             self.show_solar_daily),
+            ("Monthly Generation Profile", "Annual generation with seasonal variations", 
+             self.show_solar_monthly),
+            ("Generation vs Consumption", "Compare solar generation with household consumption", 
+             self.show_solar_comparison),
+            ("Excess/Deficit Analysis", "Calculate surplus for battery/grid export", 
+             self.show_solar_excess)
+        ]
+        
+        for name, description, command in graphs:
+            row_layout = QHBoxLayout()
+            
+            btn = QPushButton(name)
+            btn.setMinimumWidth(220)
+            btn.setStyleSheet("background-color: #FF8C00; color: white; font-weight: bold; padding: 8px;")
+            btn.clicked.connect(command)
+            row_layout.addWidget(btn)
+            
+            desc_label = QLabel(description)
+            desc_label.setFont(QFont("Arial", 9))
+            desc_label.setStyleSheet("font-style: italic;")
+            row_layout.addWidget(desc_label)
+            row_layout.addStretch()
+            
+            graphs_layout.addLayout(row_layout)
+        
+        container_layout.addWidget(graphs_group)
+        container_layout.addStretch()
+        
+        layout.addWidget(scroll)
+        
+        # Status label
+        self.solar_status = QLabel("")
+        self.solar_status.setFont(QFont("Arial", 9))
+        self.solar_status.setStyleSheet("font-style: italic; color: darkorange;")
+        layout.addWidget(self.solar_status)
+    
+    def get_solar_system(self) -> 'SolarSystemProfile':
+        """Create solar system profile from inputs"""
+        if not self.solar_generator:
+            return None
+        
+        try:
+            location_key = self.solar_location.currentData()
+            location = LOCATIONS[location_key]
+            
+            system = SolarSystemProfile(
+                name=f"{self.solar_system_size.value()}kW System",
+                peak_power_kw=self.solar_system_size.value(),
+                location=location,
+                system_efficiency=self.solar_efficiency.value(),
+                tilt_angle=self.solar_tilt.value()
+            )
+            
+            return system
+        except Exception as e:
+            QMessageBox.critical(self, "Input Error", f"Error creating solar system: {str(e)}")
+            return None
+    
+    def show_solar_daily(self):
+        """Show daily generation profile"""
+        system = self.get_solar_system()
+        if not system:
+            return
+        
+        self.solar_status.setText("Generating daily solar profile...")
+        QApplication.processEvents()
+        
+        try:
+            from PV_solar_graphs import SolarComparisonGraphs
+            
+            graph_gen = SolarComparisonGraphs(self.solar_generator, self.consumption_generator)
+            
+            # For now, just show monthly profile which includes daily curves
+            graph_gen.plot_monthly_generation_profile(system, show=True)
+            
+            self.solar_status.setText("✓ Daily solar profile displayed")
+        except Exception as e:
+            QMessageBox.critical(self, "Graph Error", f"Error generating graph: {str(e)}")
+            self.solar_status.setText("✗ Error generating graph")
+    
+    def show_solar_monthly(self):
+        """Show monthly generation profile"""
+        system = self.get_solar_system()
+        if not system:
+            return
+        
+        self.solar_status.setText("Generating monthly solar profile...")
+        QApplication.processEvents()
+        
+        try:
+            from PV_solar_graphs import SolarComparisonGraphs
+            
+            graph_gen = SolarComparisonGraphs(self.solar_generator, self.consumption_generator)
+            graph_gen.plot_monthly_generation_profile(system, show=True)
+            
+            self.solar_status.setText("✓ Monthly solar profile displayed")
+        except Exception as e:
+            QMessageBox.critical(self, "Graph Error", f"Error generating graph: {str(e)}")
+            self.solar_status.setText("✗ Error generating graph")
+    
+    def show_solar_comparison(self):
+        """Show generation vs consumption comparison"""
+        if not self.solar_compare_enabled.isChecked():
+            QMessageBox.information(self, "Info", "Please enable 'Compare with consumption' option")
+            return
+        
+        system = self.get_solar_system()
+        household = self.get_v2_profile()
+        
+        if not system or not household:
+            return
+        
+        self.solar_status.setText("Generating comparison...")
+        QApplication.processEvents()
+        
+        try:
+            from PV_solar_graphs import SolarComparisonGraphs
+            
+            graph_gen = SolarComparisonGraphs(self.solar_generator, self.consumption_generator)
+            graph_gen.plot_annual_comparison(system, household, show=True)
+            
+            self.solar_status.setText("✓ Comparison displayed")
+        except Exception as e:
+            QMessageBox.critical(self, "Graph Error", f"Error generating graph: {str(e)}")
+            self.solar_status.setText("✗ Error generating graph")
+    
+    def show_solar_excess(self):
+        """Show excess/deficit analysis"""
+        if not self.solar_compare_enabled.isChecked():
+            QMessageBox.information(self, "Info", "Please enable 'Compare with consumption' option")
+            return
+        
+        system = self.get_solar_system()
+        household = self.get_v2_profile()
+        
+        if not system or not household:
+            return
+        
+        self.solar_status.setText("Generating excess/deficit analysis...")
+        QApplication.processEvents()
+        
+        try:
+            from PV_solar_graphs import SolarComparisonGraphs
+            
+            graph_gen = SolarComparisonGraphs(self.solar_generator, self.consumption_generator)
+            # Show daily comparison which includes excess/deficit
+            graph_gen.plot_daily_comparison(system, household, 6, 0, show=True)
+            
+            self.solar_status.setText("✓ Excess/deficit analysis displayed")
+        except Exception as e:
+            QMessageBox.critical(self, "Graph Error", f"Error generating graph: {str(e)}")
+            self.solar_status.setText("✗ Error generating graph")
     
     def setup_unified_v2_tab(self):
         """Setup the unified energy flow tab (Version 2)"""
@@ -3777,6 +4546,64 @@ RECOMMENDATIONS
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error generating graph: {str(e)}")
             self.graph_status.setText("✗ Error generating graph")
+    
+    def show_revenue_offsetting_graph(self):
+        """Show monthly revenue offsetting graph"""
+        if not self.check_calculator():
+            return
+        
+        self.graph_status.setText("Generating revenue offsetting analysis...")
+        QApplication.processEvents()
+        
+        try:
+            graph_gen = PVGraphGenerator(self.current_calculator)
+            graph_gen.plot_monthly_revenue_offsetting(show=True)
+            self.graph_status.setText("✓ Revenue offsetting analysis displayed")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error generating graph: {str(e)}")
+            self.graph_status.setText("✗ Error generating graph")
+    
+    def show_weekly_graph(self):
+        """Show weekly energy balance graph"""
+        if not self.check_calculator():
+            return
+        
+        week_number = self.week_spinbox.value()
+        
+        self.graph_status.setText(f"Generating weekly analysis for week {week_number}...")
+        QApplication.processEvents()
+        
+        try:
+            graph_gen = PVGraphGenerator(self.current_calculator)
+            has_battery = self.current_calculator.battery is not None
+            graph_gen.plot_weekly_energy_balance(week_number=week_number, with_battery=has_battery, show=True)
+            self.graph_status.setText(f"✓ Weekly energy balance for week {week_number} displayed")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error generating graph: {str(e)}")
+            self.graph_status.setText("✗ Error generating graph")
+    
+    def generate_all_graphs(self):
+        """Generate and save all graphs"""
+        if not self.check_calculator():
+            return
+        
+        self.graph_status.setText("Generating all graphs...")
+        QApplication.processEvents()
+        
+        try:
+            graph_gen = PVGraphGenerator(self.current_calculator)
+            saved_files = graph_gen.generate_all_graphs(show=True)
+            
+            self.graph_status.setText(f"✓ All graphs generated and saved ({len(saved_files)} files)")
+            
+            file_list = "\n".join([os.path.basename(f) for f in saved_files])
+            QMessageBox.information(self, "Success", 
+                              f"All graphs have been generated and saved!\n\n"
+                              f"Files created:\n{file_list}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error generating graphs: {str(e)}")
+            self.graph_status.setText("✗ Error generating graphs")
+
 
 def main():
     app = QApplication(sys.argv)
