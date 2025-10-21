@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PV System Feasibility Calculator</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1><i class="fas fa-solar-panel"></i> PV System Feasibility Calculator</h1>
+        </header>
+
+        <div class="tab-container">
+            <div class="tabs">
+                <button class="tab-button active" data-tab="input">Input Parameters</button>
+                <button class="tab-button" data-tab="analysis"><i class="fas fa-battery-three-quarters"></i> Energy Flow Analysis</button>
+            </div>
+
+            <!-- Tab 1: Input Parameters -->
+            <div id="input-tab" class="tab-content active">
+                <div class="scrollable-content">
+                    <!-- Electricity Tariff Section -->
+                    <div class="section-group">
+                        <h2>Electricity Tariff</h2>
+                        <div class="form-grid">
+                            <div class="form-row">
+                                <label for="power-amperes">Connected Power (Amperes):</label>
+                                <input type="number" id="power-amperes" value="25" step="1">
+                            </div>
+                            <div class="form-row">
+                                <label for="power-cost">Power Cost (EUR/A):</label>
+                                <input type="number" id="power-cost" value="0.50" step="0.01">
+                            </div>
+                            <div class="form-row">
+                                <label for="electricity-cost">Electricity Cost (EUR/kWh):</label>
+                                <input type="number" id="electricity-cost" value="0.08" step="0.001">
+                            </div>
+                            <div class="form-row">
+                                <label for="transfer-cost">Transfer Cost (EUR/kWh):</label>
+                                <input type="number" id="transfer-cost" value="0.04" step="0.001">
+                            </div>
+                            <div class="form-row">
+                                <label for="service-cost">Service Cost (EUR/kWh):</label>
+                                <input type="number" id="service-cost" value="0.01" step="0.001">
+                            </div>
+                            <div class="form-row">
+                                <label for="monthly-service-fee">Monthly Service Fee (EUR):</label>
+                                <input type="number" id="monthly-service-fee" value="5.0" step="0.1">
+                            </div>
+                            <div class="form-row">
+                                <label for="vat-rate">VAT Rate (%):</label>
+                                <input type="number" id="vat-rate" value="21" step="1">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Energy Consumption Section -->
+                    <div class="section-group">
+                        <h2>Energy Consumption</h2>
+                        <div class="form-grid">
+                            <div class="form-row">
+                                <label for="monthly-consumption">Monthly Household Consumption (kWh):</label>
+                                <input type="number" id="monthly-consumption" value="500" step="10">
+                                <span class="hint">(household only, without EV)</span>
+                            </div>
+                            <div class="form-row">
+                                <label for="consumption-pattern">Consumption Pattern Type:</label>
+                                <select id="consumption-pattern">
+                                    <option value="working_family">Working Family (Typical weekday peaks)</option>
+                                    <option value="retired_couple">Retired Couple (Daytime usage)</option>
+                                    <option value="home_office">Home Office (Constant high usage)</option>
+                                    <option value="minimal">Minimal (Away frequently)</option>
+                                </select>
+                            </div>
+                            <div class="form-row slider-row">
+                                <label for="consumption-seasonal">Seasonal Variation:</label>
+                                <input type="range" id="consumption-seasonal" min="0" max="50" value="20" step="1">
+                                <span id="consumption-seasonal-value">0.20</span>
+                                <span class="hint">(0.1=minimal, 0.2=typical, 0.3=high)</span>
+                            </div>
+                        </div>
+                        <div class="info-box info">
+                            <p><strong>✨ V2 Features:</strong> Realistic consumption patterns with Gaussian seasonal distribution</p>
+                            <ul>
+                                <li>Weekdays: Baseline with morning (7-8) and evening (18-22) peaks</li>
+                                <li>Weekends: Flat distribution, 15% higher overall consumption</li>
+                                <li>Seasonal: Winter peak (higher heating), summer low</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- PV System Section -->
+                    <div class="section-group">
+                        <h2>PV System</h2>
+                        <div class="checkbox-row">
+                            <label>
+                                <input type="checkbox" id="pv-enabled" checked>
+                                Enable PV System Analysis
+                            </label>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-row">
+                                <label for="pv-size">System Size (kWp):</label>
+                                <input type="number" id="pv-size" value="5.0" step="0.1">
+                            </div>
+                            <div class="form-row">
+                                <label for="pv-cost">Installation Cost (EUR):</label>
+                                <input type="number" id="pv-cost" value="7000" step="100">
+                            </div>
+                            <div class="form-row">
+                                <label for="pv-location">Location:</label>
+                                <select id="pv-location">
+                                    <option value="riga_latvia">Riga, Latvia (3.2 kWh/m²/day)</option>
+                                    <option value="vilnius_lithuania">Vilnius, Lithuania (3.3 kWh/m²/day)</option>
+                                    <option value="tallinn_estonia">Tallinn, Estonia (3.0 kWh/m²/day)</option>
+                                    <option value="helsinki_finland">Helsinki, Finland (2.8 kWh/m²/day)</option>
+                                    <option value="stockholm_sweden">Stockholm, Sweden (2.9 kWh/m²/day)</option>
+                                    <option value="oslo_norway">Oslo, Norway (2.7 kWh/m²/day)</option>
+                                    <option value="copenhagen_denmark">Copenhagen, Denmark (3.0 kWh/m²/day)</option>
+                                </select>
+                                <span class="hint">(V2: Auto-calculates irradiance)</span>
+                            </div>
+                            <div class="form-row">
+                                <label for="pv-tilt">Panel Tilt Angle (°):</label>
+                                <input type="number" id="pv-tilt" value="35" min="0" max="90" step="1">
+                            </div>
+                            <div class="form-row">
+                                <label for="pv-azimuth">Panel Azimuth (°):</label>
+                                <input type="number" id="pv-azimuth" value="0" min="-180" max="180" step="1">
+                                <span class="hint">(0=South, 90=West, -90=East)</span>
+                            </div>
+                        </div>
+                        <div class="button-row">
+                            <button class="btn btn-success" id="fetch-pvgis-btn">
+                                <i class="fas fa-globe"></i> Fetch Real Solar Data from PVGIS
+                            </button>
+                        </div>
+                        <div id="solar-data-source" class="data-source">
+                            📊 Using: Built-in solar model
+                        </div>
+                        <div class="info-box success">
+                            <p><strong>💡 Enhanced Solar Data:</strong></p>
+                            <ul>
+                                <li>PVGIS: EU Science Hub's accurate satellite-based solar radiation data</li>
+                                <li>Weather: Historical cloud cover data for location-specific accuracy</li>
+                                <li>Accuracy: ±5-8% (vs ±15-25% with built-in model)</li>
+                                <li>No installation needed - uses direct API calls!</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Battery Storage Section -->
+                    <div class="section-group">
+                        <h2>Battery Storage (Optional)</h2>
+                        <div class="checkbox-row">
+                            <label>
+                                <input type="checkbox" id="battery-enabled" checked>
+                                Include Battery Storage
+                            </label>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-row">
+                                <label for="battery-capacity">Battery Capacity (kWh):</label>
+                                <input type="number" id="battery-capacity" value="7.0" step="0.5">
+                            </div>
+                            <div class="form-row">
+                                <label for="battery-cost">Battery Cost (EUR):</label>
+                                <input type="number" id="battery-cost" value="4000" step="100">
+                            </div>
+                        </div>
+                        <div class="info-box success">
+                            💡 Best case: Battery capacity should cover daily household + EV needs (~50-80% of daily total)
+                        </div>
+                        <button class="btn btn-secondary" id="battery-recommendation-btn">
+                            Calculate Recommended Battery Size
+                        </button>
+                    </div>
+
+                    <!-- Nord Pool Section -->
+                    <div class="section-group">
+                        <h2>Nord Pool Pricing</h2>
+                        <div class="form-grid">
+                            <div class="form-row">
+                                <label for="nordpool-price">Average Selling Price (EUR/kWh):</label>
+                                <input type="number" id="nordpool-price" value="0.06" step="0.001">
+                                <span class="hint">(for excess energy sold to grid)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Electric Vehicle Section -->
+                    <div class="section-group">
+                        <h2>Electric Vehicle Charging (Optional)</h2>
+                        <div class="checkbox-row">
+                            <label>
+                                <input type="checkbox" id="ev-enabled">
+                                Include EV Charging
+                            </label>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-row">
+                                <label for="ev-make">Make:</label>
+                                <select id="ev-make">
+                                    <option value="">-- Select Make --</option>
+                                    <option value="tesla">Tesla</option>
+                                    <option value="vw">Volkswagen</option>
+                                    <option value="bmw">BMW</option>
+                                    <option value="audi">Audi</option>
+                                    <option value="mercedes">Mercedes-Benz</option>
+                                    <option value="nissan">Nissan</option>
+                                    <option value="hyundai">Hyundai</option>
+                                    <option value="kia">Kia</option>
+                                    <option value="polestar">Polestar</option>
+                                    <option value="opel">Opel</option>
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <label for="ev-model">Model:</label>
+                                <select id="ev-model">
+                                    <option value="">-- Select Model --</option>
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <label for="ev-configuration">Configuration:</label>
+                                <select id="ev-configuration">
+                                    <option value="">-- Select Configuration --</option>
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <label for="ev-consumption">Consumption:</label>
+                                <input type="text" id="ev-consumption" value="--" readonly>
+                                <span class="hint">kWh/100km</span>
+                            </div>
+                            <div class="form-row">
+                                <label for="ev-weekly-km">Weekly Distance (km):</label>
+                                <input type="number" id="ev-weekly-km" value="420" step="10">
+                            </div>
+                            <div class="form-row">
+                                <label for="ev-charger-power">Home Charger Power (kW):</label>
+                                <input type="number" id="ev-charger-power" value="7.0" step="0.1">
+                                <span class="hint">(typical: 3.7, 7, 11, or 22 kW)</span>
+                            </div>
+                            <div class="form-row">
+                                <label for="ev-charging-start">Charging Start Time:</label>
+                                <input type="number" id="ev-charging-start" value="22" min="0" max="23" step="1">
+                                <span class="hint">:00 (charging continues until daily consumption is met)</span>
+                            </div>
+                        </div>
+                        <div id="ev-duration-info" class="info-text"></div>
+                        <div class="info-box info">
+                            💡 Select your car to auto-fill consumption. Charging starts at selected time and continues until daily needs are met.<br>
+                            🌐 Real-world test data from Google Sheets - actual consumption at different speeds & temperatures!
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="button-row-spread">
+                        <button class="btn btn-primary" id="save-config-btn">
+                            <i class="fas fa-save"></i> Save Configuration
+                        </button>
+                        <button class="btn btn-secondary" id="load-config-btn">
+                            <i class="fas fa-folder-open"></i> Load Configuration
+                        </button>
+                        <button class="btn btn-warning" id="reset-config-btn">
+                            <i class="fas fa-undo"></i> Reset to Defaults
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 2: Energy Flow Analysis -->
+            <div id="analysis-tab" class="tab-content">
+                <div class="scrollable-content">
+                    <!-- Date Selection -->
+                    <div class="section-group">
+                        <h2>Select Date for Analysis</h2>
+                        <div class="form-grid">
+                            <div class="form-row">
+                                <label for="analysis-date">Select Date:</label>
+                                <input type="date" id="analysis-date" value="2024-06-15">
+                                <span class="hint">(Select any date to see energy flow for that specific day)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Energy Flow Visualization -->
+                    <div class="section-group">
+                        <h2>Energy Flow Visualization</h2>
+                        <div class="analysis-grid">
+                            <div class="analysis-card">
+                                <button class="btn btn-large btn-success" id="daily-flow-btn">
+                                    Generate Daily Energy Flow
+                                </button>
+                                <div class="card-description">
+                                    <p>Complete 24-hour energy flow analysis with:</p>
+                                    <ul>
+                                        <li>Consumption and generation patterns</li>
+                                        <li>Battery charging/discharging</li>
+                                        <li>Grid import/export</li>
+                                        <li>Self-sufficiency metrics</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="analysis-card">
+                                <button class="btn btn-large btn-orange" id="annual-analysis-btn">
+                                    Generate Annual Analysis
+                                </button>
+                                <div class="card-description">
+                                    <p>Full year simulation with:</p>
+                                    <ul>
+                                        <li>Monthly import/export balance</li>
+                                        <li>Annual energy totals</li>
+                                        <li>Self-sufficiency by month</li>
+                                        <li>Cost and savings analysis</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="analysis-card">
+                                <button class="btn btn-large btn-purple" id="energy-distribution-btn">
+                                    Energy Flow Distribution
+                                </button>
+                                <div class="card-description">
+                                    <p>Detailed power usage analysis:</p>
+                                    <ul>
+                                        <li>How solar power is distributed</li>
+                                        <li>Self-consumption vs export</li>
+                                        <li>Grid import dependency</li>
+                                        <li>Monthly energy flow breakdown</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scenario Comparison -->
+                    <div class="section-group">
+                        <h2>Scenario Comparison Graphs</h2>
+                        <p class="section-description">Compare scenarios: No PV vs PV Only vs PV+Battery</p>
+                        <div class="comparison-grid">
+                            <div class="comparison-item">
+                                <button class="btn btn-medium btn-purple" id="cumulative-payback-btn">
+                                    Cumulative Payback Timeline
+                                </button>
+                                <p class="item-description">20-year cost accumulation and breakeven analysis</p>
+                            </div>
+                            <div class="comparison-item">
+                                <button class="btn btn-medium btn-gray" id="summary-report-btn">
+                                    Detailed Summary Report
+                                </button>
+                                <p class="item-description">Complete numerical breakdown of all scenarios</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Analysis Status -->
+                    <div id="analysis-status" class="status-text"></div>
+
+                    <!-- Results Container -->
+                    <div id="results-container" class="results-container">
+                        <!-- Charts and results will be displayed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for displaying detailed results -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Include Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <!-- Include main JavaScript files -->
+    <script src="ev-database.js"></script>
+    <script src="calculator.js"></script>
+    <script src="charts.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+
