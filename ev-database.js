@@ -1,4 +1,7 @@
 // EV Database with real-world consumption data
+// Data Source: Bjørn Nyland's EV Test Database (Google Sheets)
+// Original data: https://docs.google.com/spreadsheets/d/1V6ucyFGKWuSQzvI8lMzvvWJHrBS82echMVJH37kwgjE/
+// 528 configurations with actual test results at different speeds and temperatures
 const EV_DATABASE = {
   tesla: {
     name: "Tesla",

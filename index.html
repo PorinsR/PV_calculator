@@ -136,11 +136,14 @@
                         <div class="info-box success">
                             <p><strong>💡 Enhanced Solar Data:</strong></p>
                             <ul>
-                                <li>PVGIS: EU Science Hub's accurate satellite-based solar radiation data</li>
+                                <li><strong>PVGIS</strong> (<a href="https://re.jrc.ec.europa.eu/pvg_tools/en/" target="_blank">Photovoltaic Geographical Information System</a>): EU Science Hub's accurate satellite-based solar radiation data</li>
                                 <li>Weather: Historical cloud cover data for location-specific accuracy</li>
-                                <li>Accuracy: ±5-8% (vs ±15-25% with built-in model)</li>
-                                <li>No installation needed - uses direct API calls!</li>
+                                <li>Accuracy: ±5-8% (vs ±15-25% with built-in fallback model)</li>
+                                <li>Data source: © European Union, Joint Research Centre (JRC)</li>
                             </ul>
+                            <p style="font-size: 0.85em; margin-top: 10px; color: #28a745; font-weight: 500;">
+                                ✅ <strong>PVGIS data is automatically used for all calculations when available.</strong> Falls back to built-in model if unavailable.
+                            </p>
                         </div>
                     </div>
 
@@ -244,7 +247,8 @@
                         <div id="ev-duration-info" class="info-text"></div>
                         <div class="info-box info">
                             💡 Select your car to auto-fill consumption. Charging starts at selected time and continues until daily needs are met.<br>
-                            🌐 Real-world test data from Google Sheets - actual consumption at different speeds & temperatures!
+                            📊 <strong>EV Consumption Data:</strong> Real-world test data by <strong>Bjørn Nyland</strong> - 528 configurations with actual consumption at different speeds & temperatures.<br>
+                            🌐 Source: <a href="https://docs.google.com/spreadsheets/d/1V6ucyFGKWuSQzvI8lMzvvWJHrBS82echMVJH37kwgjE/" target="_blank">Bjørn Nyland's EV Test Database</a>
                         </div>
                     </div>
 

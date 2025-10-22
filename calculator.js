@@ -176,13 +176,36 @@ function getHourlyConsumption(date, config) {
 // Calculate hourly solar generation for a given date
 function getHourlySolarGeneration(date, config) {
   const month = date.getMonth() + 1; // 1-12
-  const location = config.pv.location || "riga_latvia";
   const pvSize = parseFloat(config.pv.size) || 5.0;
 
-  // Get base irradiance
-  const baseIrradiance = SOLAR_IRRADIANCE[location] || 3.2;
+  // Check if PVGIS data is available
+  if (config.pv.pvgisData && config.pv.pvgisData.monthly) {
+    const pvgisData = config.pv.pvgisData;
 
-  // Apply seasonal multiplier
+    // Get the monthly data for this month
+    const monthData = pvgisData.monthly.find((m) => m.month === month);
+
+    if (monthData) {
+      // Use PVGIS daily average energy (E_d) for this month
+      // Scale to current system size if different from when PVGIS was fetched
+      const scaleFactor = pvSize / pvgisData.systemSize;
+      const dailyGeneration = monthData.E_d * scaleFactor;
+
+      // Get hourly pattern and distribute daily generation
+      const pattern = getSolarGenerationPattern(month);
+      const patternSum = pattern.reduce((a, b) => a + b, 0);
+
+      const hourlyGeneration = pattern.map(
+        (p) => (p / patternSum) * dailyGeneration
+      );
+
+      return hourlyGeneration;
+    }
+  }
+
+  // Fallback to built-in solar model if PVGIS data not available
+  const location = config.pv.location || "riga_latvia";
+  const baseIrradiance = SOLAR_IRRADIANCE[location] || 3.2;
   const seasonalMultiplier = SEASONAL_SOLAR_MULTIPLIERS[month - 1];
   const dailyIrradiance = baseIrradiance * seasonalMultiplier;
 
@@ -191,7 +214,6 @@ function getHourlySolarGeneration(date, config) {
   const patternSum = pattern.reduce((a, b) => a + b, 0);
 
   // Calculate hourly generation
-  // Assuming ~4-5 peak sun hours equivalent per day on average
   const dailyGeneration = pvSize * dailyIrradiance * 0.85; // 85% system efficiency
   const hourlyGeneration = pattern.map(
     (p) => (p / patternSum) * dailyGeneration

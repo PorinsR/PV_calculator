@@ -3,6 +3,7 @@
 // Global state for location
 let currentLocationCoords = { lat: 56.95, lon: 24.11, name: "Riga, Latvia" };
 let addressSearchTimeout = null;
+let pvgisMonthlyData = null; // Store PVGIS monthly generation data
 
 // Initialize application
 document.addEventListener("DOMContentLoaded", function () {
@@ -222,6 +223,7 @@ function getConfiguration() {
       location_coords: currentLocationCoords,
       tilt: document.getElementById("pv-tilt").value,
       azimuth: document.getElementById("pv-azimuth").value,
+      pvgisData: pvgisMonthlyData, // Include PVGIS data if available
     },
     battery: {
       enabled: document.getElementById("battery-enabled").checked,
@@ -514,6 +516,9 @@ function initializeAddressAutocomplete() {
 }
 
 // Automatic PVGIS data fetch (no button, runs in background)
+// PVGIS: Photovoltaic Geographical Information System
+// © European Union, Joint Research Centre (JRC)
+// More info: https://re.jrc.ec.europa.eu/pvg_tools/en/
 async function fetchPVGISDataAuto() {
   const statusDiv = document.getElementById("solar-data-source");
   statusDiv.innerHTML =
@@ -528,6 +533,7 @@ async function fetchPVGISDataAuto() {
     const coords = currentLocationCoords;
 
     // Construct PVGIS API URL with CORS proxy
+    // PVGIS API documentation: https://joint-research-centre.ec.europa.eu/pvgis-photovoltaic-geographical-information-system/getting-started-pvgis/api-non-interactive-service_en
     const pvgisUrl = `https://re.jrc.ec.europa.eu/api/v5_2/PVcalc?lat=${coords.lat}&lon=${coords.lon}&peakpower=${pvSize}&loss=14&angle=${tilt}&aspect=${azimuth}&outputformat=json`;
 
     // Try with CORS proxy first
@@ -541,9 +547,22 @@ async function fetchPVGISDataAuto() {
 
     const data = await response.json();
 
-    if (data.outputs && data.outputs.totals) {
+    if (data.outputs && data.outputs.totals && data.outputs.monthly) {
       const annualProduction = data.outputs.totals.fixed.E_y;
       const avgDaily = annualProduction / 365;
+
+      // Store monthly data for calculations
+      pvgisMonthlyData = {
+        monthly: data.outputs.monthly.fixed.map((m) => ({
+          month: m.month,
+          E_m: m.E_m, // Monthly energy output (kWh)
+          H_sun: m.H_sun, // Average daily sun hours
+          E_d: m.E_d, // Average daily energy (kWh)
+        })),
+        annualProduction: annualProduction,
+        systemSize: pvSize,
+        location: currentLocationCoords,
+      };
 
       statusDiv.innerHTML = `✅ Using: PVGIS Real Data - Annual: ${annualProduction.toFixed(
         0
@@ -561,6 +580,9 @@ async function fetchPVGISDataAuto() {
   } catch (error) {
     // Fallback to built-in solar model
     console.log("PVGIS fetch failed, using built-in solar model:", error);
+
+    // Clear PVGIS data to force fallback to built-in model
+    pvgisMonthlyData = null;
 
     const coords = currentLocationCoords;
     const pvSize = parseFloat(document.getElementById("pv-size").value) || 5.0;
