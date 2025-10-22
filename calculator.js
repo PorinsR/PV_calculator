@@ -434,6 +434,29 @@ function calculateEnergyDistribution(config) {
   };
 }
 
+// Helper function to calculate full year simulation (matching Python GUI)
+function calculateFullYearSimulation(config) {
+  let totalConsumption = 0;
+  let totalGridImport = 0;
+  let totalGridExport = 0;
+
+  // Simulate every day of the year
+  for (let dayOfYear = 1; dayOfYear <= 365; dayOfYear++) {
+    const date = new Date(2024, 0, dayOfYear);
+    const dayResult = calculateDailyEnergyFlow(config, date);
+
+    totalConsumption += dayResult.totals.consumption;
+    totalGridImport += dayResult.totals.gridImport;
+    totalGridExport += dayResult.totals.gridExport;
+  }
+
+  return {
+    consumption: totalConsumption,
+    gridImport: totalGridImport,
+    gridExport: totalGridExport,
+  };
+}
+
 // Calculate cumulative payback
 function calculateCumulativePayback(config) {
   const pvCost = parseFloat(config.pv.cost) || 7000;
@@ -442,29 +465,45 @@ function calculateCumulativePayback(config) {
     : 0;
   const totalInvestment = pvCost + batteryCost;
 
-  // Get annual analysis with PV+Battery (scenario 3)
-  const annual = calculateAnnualAnalysis(config);
-
-  // Calculate baseline cost (scenario 1: no PV)
-  const monthlyConsumption =
-    parseFloat(config.consumption.monthly_consumption) || 500;
+  // Calculate pricing rates (matching Python GUI exactly)
   const electricityCost = parseFloat(config.tariff.electricity_cost) || 0.08;
   const transferCost = parseFloat(config.tariff.transfer_cost) || 0.04;
   const serviceCost = parseFloat(config.tariff.service_cost) || 0.01;
   const vatRate = parseFloat(config.tariff.vat_rate) || 21;
+  const nordPoolPrice = parseFloat(config.nordpool.price) || 0.06;
+
   const importRate =
     (electricityCost + transferCost + serviceCost) * (1 + vatRate / 100);
+  const exportRate = Math.max(
+    0,
+    nordPoolPrice - transferCost * (1 + vatRate / 100)
+  );
 
-  // Scenario 1: All consumption from grid (no monthly fees in comparison)
-  const scenario1AnnualCost = monthlyConsumption * 12 * importRate;
+  // SCENARIO 1: No PV, No Battery (Baseline)
+  // Calculate total consumption for the year with all variations
+  const config1 = JSON.parse(JSON.stringify(config));
+  config1.pv.enabled = false;
+  config1.battery.enabled = false;
+  const results1 = calculateFullYearSimulation(config1);
+  const scenario1AnnualCost = results1.consumption * importRate;
 
-  // Scenario 3 annual cost (PV+Battery) - from simulation
-  const scenario3AnnualCost = annual.annualTotals.cost;
-
-  // Scenario 2 annual cost (PV Only) - approximate as 20% higher than PV+Battery
-  // Less battery = more grid import = higher cost
+  // SCENARIO 2: PV Only (No Battery)
+  // Calculate import/export with PV but no battery
+  const config2 = JSON.parse(JSON.stringify(config));
+  config2.pv.enabled = true;
+  config2.battery.enabled = false;
+  const results2 = calculateFullYearSimulation(config2);
   const scenario2AnnualCost =
-    scenario3AnnualCost + (scenario1AnnualCost - scenario3AnnualCost) * 0.25;
+    results2.gridImport * importRate - results2.gridExport * exportRate;
+
+  // SCENARIO 3: PV + Battery (Full System)
+  // Calculate import/export with both PV and battery
+  const config3 = JSON.parse(JSON.stringify(config));
+  config3.pv.enabled = true;
+  config3.battery.enabled = config.battery.enabled;
+  const results3 = calculateFullYearSimulation(config3);
+  const scenario3AnnualCost =
+    results3.gridImport * importRate - results3.gridExport * exportRate;
 
   const scenarios = {
     noPV: { costs: [], label: "No PV System" },
@@ -474,20 +513,21 @@ function calculateCumulativePayback(config) {
 
   const years = 20;
 
+  // Build cumulative cost arrays (matching Python GUI exactly)
   for (let year = 0; year <= years; year++) {
-    // Scenario 1: No PV - just accumulating annual electricity costs
+    // Scenario 1: No PV - just annual costs accumulating
     scenarios.noPV.costs.push(scenario1AnnualCost * year);
 
-    // Scenario 2: PV Only - upfront PV cost + annual operating costs
+    // Scenario 2: PV Only - upfront cost + annual electricity costs
     scenarios.pvOnly.costs.push(pvCost + scenario2AnnualCost * year);
 
-    // Scenario 3: PV + Battery - upfront costs + annual operating costs
+    // Scenario 3: PV + Battery - upfront cost + annual electricity costs
     scenarios.pvBattery.costs.push(
       totalInvestment + scenario3AnnualCost * year
     );
   }
 
-  // Calculate breakeven periods (when PV lines cross baseline)
+  // Calculate savings and breakeven periods
   const savings_pv_only = scenario1AnnualCost - scenario2AnnualCost;
   const savings_pv_battery = scenario1AnnualCost - scenario3AnnualCost;
 
@@ -500,6 +540,11 @@ function calculateCumulativePayback(config) {
         savings_pv_battery > 0
           ? Math.ceil(totalInvestment / savings_pv_battery)
           : 999,
+    },
+    annualCosts: {
+      scenario1: scenario1AnnualCost,
+      scenario2: scenario2AnnualCost,
+      scenario3: scenario3AnnualCost,
     },
   };
 }
@@ -514,44 +559,33 @@ function generateComparisonSummary(config) {
     ? parseFloat(config.battery.cost) || 4000
     : 0;
 
-  // Calculate what the annual cost would be without PV
-  const monthlyConsumption =
-    parseFloat(config.consumption.monthly_consumption) || 500;
-  const electricityCost = parseFloat(config.tariff.electricity_cost) || 0.08;
-  const transferCost = parseFloat(config.tariff.transfer_cost) || 0.04;
-  const serviceCost = parseFloat(config.tariff.service_cost) || 0.01;
-  const vatRate = parseFloat(config.tariff.vat_rate) || 21;
-  const importRate =
-    (electricityCost + transferCost + serviceCost) * (1 + vatRate / 100);
-
-  // Baseline cost: all consumption from grid (monthly fees not included in comparison)
-  const annualCostNoPV = monthlyConsumption * 12 * importRate;
+  // Use the correctly calculated scenario costs from payback calculation
+  const scenario1Cost = payback.annualCosts.scenario1;
+  const scenario2Cost = payback.annualCosts.scenario2;
+  const scenario3Cost = payback.annualCosts.scenario3;
 
   return {
     scenarios: {
       noPV: {
-        annualCost: annualCostNoPV,
-        twentyYearCost: annualCostNoPV * 20,
+        annualCost: scenario1Cost,
+        twentyYearCost: scenario1Cost * 20,
         selfSufficiency: 0,
         gridDependency: 100,
       },
       pvOnly: {
         initialInvestment: pvCost,
-        // Annual cost = operating cost + amortized investment
-        // Operating cost for PV only is approximately 80% of PV+Battery cost
-        annualCost: pvCost / 20 + annual.annualTotals.cost * 1.2, // Estimate 20% more than PV+Battery
+        annualCost: scenario2Cost,
         twentyYearCost: payback.scenarios.pvOnly.costs[20],
-        annualSavings: annual.annualTotals.savings * 0.8,
+        annualSavings: scenario1Cost - scenario2Cost,
         breakeven: payback.breakeven.pvOnly,
-        selfSufficiency: annual.annualTotals.selfSufficiency * 0.8,
-        gridDependency: 100 - annual.annualTotals.selfSufficiency * 0.8,
+        selfSufficiency: annual.annualTotals.selfSufficiency * 0.7, // Estimate ~70% of PV+Battery
+        gridDependency: 100 - annual.annualTotals.selfSufficiency * 0.7,
       },
       pvBattery: {
         initialInvestment: pvCost + batteryCost,
-        // Annual cost = operating cost (from simulation) + amortized investment
-        annualCost: (pvCost + batteryCost) / 20 + annual.annualTotals.cost,
+        annualCost: scenario3Cost,
         twentyYearCost: payback.scenarios.pvBattery.costs[20],
-        annualSavings: annual.annualTotals.savings,
+        annualSavings: scenario1Cost - scenario3Cost,
         breakeven: payback.breakeven.pvBattery,
         selfSufficiency: annual.annualTotals.selfSufficiency,
         gridDependency: 100 - annual.annualTotals.selfSufficiency,
