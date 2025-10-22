@@ -282,7 +282,6 @@ function setConfiguration(config) {
     document.getElementById("pv-size").value = config.pv.size || 9;
     document.getElementById("pv-cost").value = config.pv.cost || 2500;
     document.getElementById("pv-location").value =
-<<<<<<< HEAD
       config.pv.location || "Riga, Latvia";
     document.getElementById("pv-tilt").value = config.pv.tilt || 15;
     document.getElementById("pv-azimuth").value = config.pv.azimuth || 20;
@@ -291,11 +290,6 @@ function setConfiguration(config) {
     if (config.pv.location_coords) {
       currentLocationCoords = config.pv.location_coords;
     }
-=======
-      config.pv.location || "riga_latvia";
-    document.getElementById("pv-tilt").value = config.pv.tilt || 15;
-    document.getElementById("pv-azimuth").value = config.pv.azimuth || 20;
->>>>>>> eccdcfab7a4a8414ad7484f7f0b3143c41ba9c2b
   }
 
   // Battery
