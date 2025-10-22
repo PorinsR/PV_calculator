@@ -94,6 +94,37 @@ function initializeFormElements() {
       element.addEventListener("input", updateEVChargingDuration);
     }
   );
+
+  // Collapsible sections
+  initializeCollapsibleSections();
+}
+
+// Initialize collapsible section behavior
+function initializeCollapsibleSections() {
+  const sections = [
+    { checkboxId: "pv-enabled", collapsibleId: "pv-collapsible" },
+    { checkboxId: "battery-enabled", collapsibleId: "battery-collapsible" },
+    { checkboxId: "ev-enabled", collapsibleId: "ev-collapsible" },
+  ];
+
+  sections.forEach(({ checkboxId, collapsibleId }) => {
+    const checkbox = document.getElementById(checkboxId);
+    const collapsible = document.getElementById(collapsibleId);
+
+    // Set initial state (expanded if checked)
+    if (!checkbox.checked) {
+      collapsible.classList.add("collapsed");
+    }
+
+    // Toggle on checkbox change
+    checkbox.addEventListener("change", function () {
+      if (this.checked) {
+        collapsible.classList.remove("collapsed");
+      } else {
+        collapsible.classList.add("collapsed");
+      }
+    });
+  });
 }
 
 // Initialize EV database
@@ -280,7 +311,7 @@ function setConfiguration(config) {
 
   // PV
   if (config.pv) {
-    document.getElementById("pv-enabled").checked = config.pv.enabled !== false;
+    document.getElementById("pv-enabled").checked = config.pv.enabled === true;
     document.getElementById("pv-size").value = config.pv.size || 9;
     document.getElementById("pv-cost").value = config.pv.cost || 2500;
     document.getElementById("pv-location").value =
@@ -292,15 +323,33 @@ function setConfiguration(config) {
     if (config.pv.location_coords) {
       currentLocationCoords = config.pv.location_coords;
     }
+
+    // Trigger collapsible update
+    const pvCheckbox = document.getElementById("pv-enabled");
+    const pvCollapsible = document.getElementById("pv-collapsible");
+    if (pvCheckbox.checked) {
+      pvCollapsible.classList.remove("collapsed");
+    } else {
+      pvCollapsible.classList.add("collapsed");
+    }
   }
 
   // Battery
   if (config.battery) {
     document.getElementById("battery-enabled").checked =
-      config.battery.enabled !== false;
+      config.battery.enabled === true;
     document.getElementById("battery-capacity").value =
       config.battery.capacity || 14;
     document.getElementById("battery-cost").value = config.battery.cost || 2000;
+
+    // Trigger collapsible update
+    const batteryCheckbox = document.getElementById("battery-enabled");
+    const batteryCollapsible = document.getElementById("battery-collapsible");
+    if (batteryCheckbox.checked) {
+      batteryCollapsible.classList.remove("collapsed");
+    } else {
+      batteryCollapsible.classList.add("collapsed");
+    }
   }
 
   // Nord Pool
@@ -347,6 +396,15 @@ function setConfiguration(config) {
       config.ev.charger_power || 11;
     document.getElementById("ev-charging-start").value =
       config.ev.charging_start || 18;
+
+    // Trigger collapsible update
+    const evCheckbox = document.getElementById("ev-enabled");
+    const evCollapsible = document.getElementById("ev-collapsible");
+    if (evCheckbox.checked) {
+      evCollapsible.classList.remove("collapsed");
+    } else {
+      evCollapsible.classList.add("collapsed");
+    }
   }
 }
 
@@ -627,11 +685,6 @@ function generateDailyFlow() {
   const config = getConfiguration();
   const date = document.getElementById("analysis-date").value;
 
-  if (!config.pv.enabled) {
-    showToast("Please enable PV System to use this feature", "warning");
-    return;
-  }
-
   document.getElementById(
     "analysis-status"
   ).textContent = `Calculating daily energy flow for ${date}...`;
@@ -648,11 +701,6 @@ function generateDailyFlow() {
 function generateAnnualAnalysis() {
   const config = getConfiguration();
 
-  if (!config.pv.enabled) {
-    showToast("Please enable PV System to use this feature", "warning");
-    return;
-  }
-
   document.getElementById("analysis-status").textContent =
     "Calculating annual analysis...";
 
@@ -665,11 +713,6 @@ function generateAnnualAnalysis() {
 
 function generateEnergyDistribution() {
   const config = getConfiguration();
-
-  if (!config.pv.enabled) {
-    showToast("Please enable PV System to use this feature", "warning");
-    return;
-  }
 
   document.getElementById("analysis-status").textContent =
     "Calculating energy distribution...";
@@ -684,11 +727,6 @@ function generateEnergyDistribution() {
 function generateCumulativePayback() {
   const config = getConfiguration();
 
-  if (!config.pv.enabled) {
-    showToast("Please enable PV System to use this feature", "warning");
-    return;
-  }
-
   document.getElementById("analysis-status").textContent =
     "Calculating cumulative payback...";
 
@@ -701,11 +739,6 @@ function generateCumulativePayback() {
 
 function generateSummaryReport() {
   const config = getConfiguration();
-
-  if (!config.pv.enabled) {
-    showToast("Please enable PV System to use this feature", "warning");
-    return;
-  }
 
   document.getElementById("analysis-status").textContent =
     "Generating summary report...";

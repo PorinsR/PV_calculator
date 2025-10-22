@@ -463,36 +463,51 @@ function displayCumulativePaybackChart(data) {
 
   destroyChart("paybackChart");
   const ctx = document.getElementById("paybackChart").getContext("2d");
+
+  // Build datasets only for enabled scenarios
+  const datasets = [];
+
+  // Always include baseline
+  if (data.scenarios.noPV) {
+    datasets.push({
+      label: data.scenarios.noPV.label,
+      data: data.scenarios.noPV.costs,
+      borderColor: "#f44336",
+      backgroundColor: "rgba(244, 67, 54, 0.1)",
+      borderWidth: 3,
+      tension: 0.1,
+    });
+  }
+
+  // Only include PV Only if it exists
+  if (data.scenarios.pvOnly && data.scenarios.pvOnly.enabled) {
+    datasets.push({
+      label: data.scenarios.pvOnly.label,
+      data: data.scenarios.pvOnly.costs,
+      borderColor: "#FF9800",
+      backgroundColor: "rgba(255, 152, 0, 0.1)",
+      borderWidth: 3,
+      tension: 0.1,
+    });
+  }
+
+  // Only include PV+Battery if it exists
+  if (data.scenarios.pvBattery && data.scenarios.pvBattery.enabled) {
+    datasets.push({
+      label: data.scenarios.pvBattery.label,
+      data: data.scenarios.pvBattery.costs,
+      borderColor: "#4CAF50",
+      backgroundColor: "rgba(76, 175, 80, 0.1)",
+      borderWidth: 3,
+      tension: 0.1,
+    });
+  }
+
   chartInstances["paybackChart"] = new Chart(ctx, {
     type: "line",
     data: {
       labels: data.years,
-      datasets: [
-        {
-          label: data.scenarios.noPV.label,
-          data: data.scenarios.noPV.costs,
-          borderColor: "#f44336",
-          backgroundColor: "rgba(244, 67, 54, 0.1)",
-          borderWidth: 3,
-          tension: 0.1,
-        },
-        {
-          label: data.scenarios.pvOnly.label,
-          data: data.scenarios.pvOnly.costs,
-          borderColor: "#FF9800",
-          backgroundColor: "rgba(255, 152, 0, 0.1)",
-          borderWidth: 3,
-          tension: 0.1,
-        },
-        {
-          label: data.scenarios.pvBattery.label,
-          data: data.scenarios.pvBattery.costs,
-          borderColor: "#4CAF50",
-          backgroundColor: "rgba(76, 175, 80, 0.1)",
-          borderWidth: 3,
-          tension: 0.1,
-        },
-      ],
+      datasets: datasets,
     },
     options: {
       responsive: true,
@@ -577,9 +592,11 @@ function displaySummaryReport(data) {
 
   const reportDiv = document.createElement("div");
   reportDiv.className = "chart-container";
-  reportDiv.innerHTML = `
-        <h3>Detailed Scenario Comparison Report</h3>
-        
+
+  let htmlContent = `<h3>Detailed Scenario Comparison Report</h3>`;
+
+  // Always show baseline
+  htmlContent += `
         <h4 style="margin-top: 20px; color: #f44336;">Scenario 1: No PV System</h4>
         <table>
             <tr>
@@ -599,7 +616,11 @@ function displaySummaryReport(data) {
                 <td>${data.scenarios.noPV.gridDependency.toFixed(1)}%</td>
             </tr>
         </table>
-        
+  `;
+
+  // Only show PV Only if enabled
+  if (data.scenarios.pvOnly && data.scenarios.pvOnly.enabled) {
+    htmlContent += `
         <h4 style="margin-top: 20px; color: #FF9800;">Scenario 2: PV Only</h4>
         <table>
             <tr>
@@ -638,7 +659,12 @@ function displaySummaryReport(data) {
                 ).toFixed(0)}</strong></td>
             </tr>
         </table>
-        
+    `;
+  }
+
+  // Only show PV+Battery if enabled
+  if (data.scenarios.pvBattery && data.scenarios.pvBattery.enabled) {
+    htmlContent += `
         <h4 style="margin-top: 20px; color: #4CAF50;">Scenario 3: PV + Battery</h4>
         <table>
             <tr>
@@ -679,14 +705,21 @@ function displaySummaryReport(data) {
                   data.scenarios.noPV.twentyYearCost -
                   data.scenarios.pvBattery.twentyYearCost
                 ).toFixed(0)}</strong></td>
-            </tr>
+            </tr>`;
+
+    // Only show comparison with PV Only if it also exists
+    if (data.scenarios.pvOnly && data.scenarios.pvOnly.enabled) {
+      htmlContent += `
             <tr style="background-color: #fff3e0;">
                 <td><strong>Additional Savings vs PV Only:</strong></td>
                 <td><strong>€${(
                   data.scenarios.pvOnly.twentyYearCost -
                   data.scenarios.pvBattery.twentyYearCost
                 ).toFixed(0)}</strong></td>
-            </tr>
+            </tr>`;
+    }
+
+    htmlContent += `
         </table>
         
         <h4 style="margin-top: 20px;">Recommendation</h4>
@@ -710,11 +743,20 @@ function displaySummaryReport(data) {
                        €${data.scenarios.pvBattery.annualSavings.toFixed(
                          0
                        )}/year.`
-                    : `The breakeven period of ${data.scenarios.pvBattery.breakeven} years is relatively long. Consider starting with PV only 
-                       (${data.scenarios.pvOnly.breakeven} year breakeven) and adding battery storage later when prices decrease.`
+                    : `The breakeven period of ${
+                        data.scenarios.pvBattery.breakeven
+                      } years is relatively long. Consider starting with PV only 
+                       (${
+                         data.scenarios.pvOnly
+                           ? data.scenarios.pvOnly.breakeven
+                           : "N/A"
+                       } year breakeven) and adding battery storage later when prices decrease.`
                 }
             </p>
         </div>
     `;
+  }
+
+  reportDiv.innerHTML = htmlContent;
   container.appendChild(reportDiv);
 }

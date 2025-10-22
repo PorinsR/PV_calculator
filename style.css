@@ -315,6 +315,21 @@ header h1 {
     margin-top: 10px;
 }
 
+/* Collapsible sections */
+.collapsible-content {
+    max-height: 2000px;
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+    opacity: 1;
+}
+
+.collapsible-content.collapsed {
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+}
+
 /* Buttons */
 .btn {
     padding: 10px 20px;
