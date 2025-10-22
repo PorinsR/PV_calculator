@@ -28,27 +28,27 @@
                         <div class="form-grid">
                             <div class="form-row">
                                 <label for="power-amperes">Connected Power (Amperes):</label>
-                                <input type="number" id="power-amperes" value="25" step="1">
+                                <input type="number" id="power-amperes" value="16" step="1">
                             </div>
                             <div class="form-row">
                                 <label for="power-cost">Power Cost (EUR/A):</label>
-                                <input type="number" id="power-cost" value="0.50" step="0.01">
+                                <input type="number" id="power-cost" value="0.82" step="0.01">
                             </div>
                             <div class="form-row">
                                 <label for="electricity-cost">Electricity Cost (EUR/kWh):</label>
-                                <input type="number" id="electricity-cost" value="0.08" step="0.001">
+                                <input type="number" id="electricity-cost" value="0.10379" step="0.001">
                             </div>
                             <div class="form-row">
                                 <label for="transfer-cost">Transfer Cost (EUR/kWh):</label>
-                                <input type="number" id="transfer-cost" value="0.04" step="0.001">
+                                <input type="number" id="transfer-cost" value="0.03962" step="0.001">
                             </div>
                             <div class="form-row">
                                 <label for="service-cost">Service Cost (EUR/kWh):</label>
-                                <input type="number" id="service-cost" value="0.01" step="0.001">
+                                <input type="number" id="service-cost" value="0.01650" step="0.001">
                             </div>
                             <div class="form-row">
                                 <label for="monthly-service-fee">Monthly Service Fee (EUR):</label>
-                                <input type="number" id="monthly-service-fee" value="5.0" step="0.1">
+                                <input type="number" id="monthly-service-fee" value="0.83" step="0.1">
                             </div>
                             <div class="form-row">
                                 <label for="vat-rate">VAT Rate (%):</label>
@@ -63,7 +63,7 @@
                         <div class="form-grid">
                             <div class="form-row">
                                 <label for="monthly-consumption">Monthly Household Consumption (kWh):</label>
-                                <input type="number" id="monthly-consumption" value="500" step="10">
+                                <input type="number" id="monthly-consumption" value="250" step="10">
                                 <span class="hint">(household only, without EV)</span>
                             </div>
                             <div class="form-row">
@@ -104,11 +104,11 @@
                         <div class="form-grid">
                             <div class="form-row">
                                 <label for="pv-size">System Size (kWp):</label>
-                                <input type="number" id="pv-size" value="5.0" step="0.1">
+                                <input type="number" id="pv-size" value="9" step="0.1">
                             </div>
                             <div class="form-row">
                                 <label for="pv-cost">Installation Cost (EUR):</label>
-                                <input type="number" id="pv-cost" value="7000" step="100">
+                                <input type="number" id="pv-cost" value="2500" step="100">
                             </div>
                             <div class="form-row">
                                 <label for="pv-location">Location:</label>
@@ -125,11 +125,11 @@
                             </div>
                             <div class="form-row">
                                 <label for="pv-tilt">Panel Tilt Angle (°):</label>
-                                <input type="number" id="pv-tilt" value="35" min="0" max="90" step="1">
+                                <input type="number" id="pv-tilt" value="15" min="0" max="90" step="1">
                             </div>
                             <div class="form-row">
                                 <label for="pv-azimuth">Panel Azimuth (°):</label>
-                                <input type="number" id="pv-azimuth" value="0" min="-180" max="180" step="1">
+                                <input type="number" id="pv-azimuth" value="20" min="-180" max="180" step="1">
                                 <span class="hint">(0=South, 90=West, -90=East)</span>
                             </div>
                         </div>
@@ -164,11 +164,11 @@
                         <div class="form-grid">
                             <div class="form-row">
                                 <label for="battery-capacity">Battery Capacity (kWh):</label>
-                                <input type="number" id="battery-capacity" value="7.0" step="0.5">
+                                <input type="number" id="battery-capacity" value="14" step="0.5">
                             </div>
                             <div class="form-row">
                                 <label for="battery-cost">Battery Cost (EUR):</label>
-                                <input type="number" id="battery-cost" value="4000" step="100">
+                                <input type="number" id="battery-cost" value="2000" step="100">
                             </div>
                         </div>
                         <div class="info-box success">
@@ -185,7 +185,7 @@
                         <div class="form-grid">
                             <div class="form-row">
                                 <label for="nordpool-price">Average Selling Price (EUR/kWh):</label>
-                                <input type="number" id="nordpool-price" value="0.06" step="0.001">
+                                <input type="number" id="nordpool-price" value="0.01" step="0.001">
                                 <span class="hint">(for excess energy sold to grid)</span>
                             </div>
                         </div>
@@ -196,7 +196,7 @@
                         <h2>Electric Vehicle Charging (Optional)</h2>
                         <div class="checkbox-row">
                             <label>
-                                <input type="checkbox" id="ev-enabled">
+                                <input type="checkbox" id="ev-enabled" checked>
                                 Include EV Charging
                             </label>
                         </div>
@@ -236,16 +236,16 @@
                             </div>
                             <div class="form-row">
                                 <label for="ev-weekly-km">Weekly Distance (km):</label>
-                                <input type="number" id="ev-weekly-km" value="420" step="10">
+                                <input type="number" id="ev-weekly-km" value="315" step="10">
                             </div>
                             <div class="form-row">
                                 <label for="ev-charger-power">Home Charger Power (kW):</label>
-                                <input type="number" id="ev-charger-power" value="7.0" step="0.1">
+                                <input type="number" id="ev-charger-power" value="11" step="0.1">
                                 <span class="hint">(typical: 3.7, 7, 11, or 22 kW)</span>
                             </div>
                             <div class="form-row">
                                 <label for="ev-charging-start">Charging Start Time:</label>
-                                <input type="number" id="ev-charging-start" value="22" min="0" max="23" step="1">
+                                <input type="number" id="ev-charging-start" value="18" min="0" max="23" step="1">
                                 <span class="hint">:00 (charging continues until daily consumption is met)</span>
                             </div>
                         </div>

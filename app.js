@@ -245,24 +245,24 @@ function setConfiguration(config) {
   // Tariff
   if (config.tariff) {
     document.getElementById("power-amperes").value =
-      config.tariff.power_amperes || 25;
+      config.tariff.power_amperes || 16;
     document.getElementById("power-cost").value =
-      config.tariff.power_cost || 0.5;
+      config.tariff.power_cost || 0.82;
     document.getElementById("electricity-cost").value =
-      config.tariff.electricity_cost || 0.08;
+      config.tariff.electricity_cost || 0.10379;
     document.getElementById("transfer-cost").value =
-      config.tariff.transfer_cost || 0.04;
+      config.tariff.transfer_cost || 0.03962;
     document.getElementById("service-cost").value =
-      config.tariff.service_cost || 0.01;
+      config.tariff.service_cost || 0.0165;
     document.getElementById("monthly-service-fee").value =
-      config.tariff.monthly_service_fee || 5.0;
+      config.tariff.monthly_service_fee || 0.83;
     document.getElementById("vat-rate").value = config.tariff.vat_rate || 21;
   }
 
   // Consumption
   if (config.consumption) {
     document.getElementById("monthly-consumption").value =
-      config.consumption.monthly_consumption || 500;
+      config.consumption.monthly_consumption || 250;
     document.getElementById("consumption-pattern").value =
       config.consumption.pattern_type || "working_family";
     const seasonalValue = parseFloat(
@@ -276,12 +276,12 @@ function setConfiguration(config) {
   // PV
   if (config.pv) {
     document.getElementById("pv-enabled").checked = config.pv.enabled !== false;
-    document.getElementById("pv-size").value = config.pv.size || 5.0;
-    document.getElementById("pv-cost").value = config.pv.cost || 7000;
+    document.getElementById("pv-size").value = config.pv.size || 9;
+    document.getElementById("pv-cost").value = config.pv.cost || 2500;
     document.getElementById("pv-location").value =
       config.pv.location || "riga_latvia";
-    document.getElementById("pv-tilt").value = config.pv.tilt || 35;
-    document.getElementById("pv-azimuth").value = config.pv.azimuth || 0;
+    document.getElementById("pv-tilt").value = config.pv.tilt || 15;
+    document.getElementById("pv-azimuth").value = config.pv.azimuth || 20;
   }
 
   // Battery
@@ -289,14 +289,14 @@ function setConfiguration(config) {
     document.getElementById("battery-enabled").checked =
       config.battery.enabled !== false;
     document.getElementById("battery-capacity").value =
-      config.battery.capacity || 7.0;
-    document.getElementById("battery-cost").value = config.battery.cost || 4000;
+      config.battery.capacity || 14;
+    document.getElementById("battery-cost").value = config.battery.cost || 2000;
   }
 
   // Nord Pool
   if (config.nordpool) {
     document.getElementById("nordpool-price").value =
-      config.nordpool.price || 0.06;
+      config.nordpool.price || 0.01;
   }
 
   // EV
@@ -332,11 +332,11 @@ function setConfiguration(config) {
       }, 100);
     }
 
-    document.getElementById("ev-weekly-km").value = config.ev.weekly_km || 420;
+    document.getElementById("ev-weekly-km").value = config.ev.weekly_km || 315;
     document.getElementById("ev-charger-power").value =
-      config.ev.charger_power || 7.0;
+      config.ev.charger_power || 11;
     document.getElementById("ev-charging-start").value =
-      config.ev.charging_start || 22;
+      config.ev.charging_start || 18;
   }
 }
 
