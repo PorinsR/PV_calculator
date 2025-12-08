@@ -527,31 +527,37 @@ function generateComparisonSummary(config) {
   // Baseline cost: all consumption from grid (monthly fees not included in comparison)
   const annualCostNoPV = monthlyConsumption * 12 * importRate;
 
+  // For PV Only scenario: estimate operating cost (without battery, more grid import)
+  // Without battery, self-consumption is lower, so more expensive than PV+Battery
+  const pvOnlyOperatingCost = annual.annualTotals.cost * 1.3;
+
   return {
     scenarios: {
       noPV: {
         annualCost: annualCostNoPV,
+        monthlyCost: annualCostNoPV / 12,
         twentyYearCost: annualCostNoPV * 20,
         selfSufficiency: 0,
         gridDependency: 100,
       },
       pvOnly: {
         initialInvestment: pvCost,
-        // Annual cost = operating cost + amortized investment
-        // Operating cost for PV only is approximately 80% of PV+Battery cost
-        annualCost: pvCost / 20 + annual.annualTotals.cost * 1.2, // Estimate 20% more than PV+Battery
+        // Annual cost = ONLY operating cost (electricity bill), NOT including amortized investment
+        annualCost: pvOnlyOperatingCost,
+        monthlyCost: pvOnlyOperatingCost / 12,
         twentyYearCost: payback.scenarios.pvOnly.costs[20],
-        annualSavings: annual.annualTotals.savings * 0.8,
+        annualSavings: annualCostNoPV - pvOnlyOperatingCost,
         breakeven: payback.breakeven.pvOnly,
         selfSufficiency: annual.annualTotals.selfSufficiency * 0.8,
         gridDependency: 100 - annual.annualTotals.selfSufficiency * 0.8,
       },
       pvBattery: {
         initialInvestment: pvCost + batteryCost,
-        // Annual cost = operating cost (from simulation) + amortized investment
-        annualCost: (pvCost + batteryCost) / 20 + annual.annualTotals.cost,
+        // Annual cost = ONLY operating cost (electricity bill), NOT including amortized investment
+        annualCost: annual.annualTotals.cost,
+        monthlyCost: annual.annualTotals.cost / 12,
         twentyYearCost: payback.scenarios.pvBattery.costs[20],
-        annualSavings: annual.annualTotals.savings,
+        annualSavings: annualCostNoPV - annual.annualTotals.cost,
         breakeven: payback.breakeven.pvBattery,
         selfSufficiency: annual.annualTotals.selfSufficiency,
         gridDependency: 100 - annual.annualTotals.selfSufficiency,

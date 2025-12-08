@@ -8,10 +8,11 @@ Generates realistic daily power consumption patterns based on:
 """
 
 import math
+import calendar
 import numpy as np
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 
 @dataclass
@@ -89,6 +90,26 @@ class HouseholdProfile:
     # Seasonal variation strength (0.0 = no variation, 1.0 = strong variation)
     seasonal_strength: float = 0.5
     
+    # Always-on base load (kWh/day) for standby/critical loads
+    base_load_kwh_per_day: float = 4.0
+    
+    # Optional custom monthly consumption totals (kWh) instead of seasonal curve
+    # If provided, length 12 is expected; values override seasonal calculation
+    custom_monthly_kwh: Optional[List[float]] = None
+    # Whether the custom monthly totals already include the base load
+    custom_monthly_includes_base: bool = True
+    # Optional climate drivers (degree days) for seasonal shaping
+    monthly_hdd: Optional[List[float]] = None
+    monthly_cdd: Optional[List[float]] = None
+    heating_sensitivity: float = 0.6  # share of variable load driven by heating
+    cooling_sensitivity: float = 0.4  # share driven by cooling
+    heating_fuel: str = "electric"  # electric, gas
+    dhw_fuel: str = "electric"      # domestic hot water: electric, gas
+    
+    # Calendar/occupancy controls
+    holiday_calendar: Optional[List[Tuple[int, int]]] = None  # list of (month, day)
+    occupancy_weekly_patterns: Optional[List[str]] = None  # len=7 pattern overrides per weekday
+    
     # Peak consumption time (hour of day, 0-23)
     peak_evening_hour: int = 19
     
@@ -163,7 +184,10 @@ class ConsumptionPatternGenerator:
     
     def __init__(self):
         """Initialize the consumption pattern generator"""
-        pass
+        # Cache seasonal curves keyed by (strength, weekend_factor)
+        self._seasonal_cache: Dict[Tuple[float, float], List[float]] = {}
+        # Seeded for reproducibility; callers can override with set_random_seed
+        self.rng = np.random.default_rng(int(datetime.now().timestamp()))
     
     def generate_gaussian_seasonal_curve(self, 
                                         peak_month: int = 1, 
@@ -242,6 +266,142 @@ class ConsumptionPatternGenerator:
         
         return normalized_curve.tolist()
     
+    def generate_degree_day_curve(self,
+                                  monthly_hdd: List[float],
+                                  monthly_cdd: List[float],
+                                  heating_weight: float = 0.6,
+                                  cooling_weight: float = 0.4,
+                                  weekend_factor: float = 1.15) -> List[float]:
+        """
+        Build monthly multipliers from HDD/CDD with weekend normalization.
+        """
+        months = range(12)
+        days_in_month = [calendar.monthrange(datetime.now().year, m + 1)[1] for m in months]
+        
+        hdd = np.array(monthly_hdd[:12], dtype=float)
+        cdd = np.array(monthly_cdd[:12], dtype=float)
+        
+        if hdd.max() > 0:
+            hdd = hdd / max(hdd.max(), 1e-6)
+        if cdd.max() > 0:
+            cdd = cdd / max(cdd.max(), 1e-6)
+        
+        # Base load multiplier is 1; variable part scales with degree days
+        curve = 1.0 + heating_weight * hdd + cooling_weight * cdd
+        
+        # Normalize for weekends/weekday day-count so the weighted average is 1.0
+        weighted_sum = 0
+        total_days = 0
+        for i, days in enumerate(days_in_month):
+            weekdays = sum(1 for d in range(1, days + 1) if datetime(datetime.now().year, i + 1, d).weekday() < 5)
+            weekends = days - weekdays
+            month_weight = curve[i] * weekdays + curve[i] * weekend_factor * weekends
+            weighted_sum += month_weight
+            total_days += days
+        
+        normalization_factor = weighted_sum / total_days
+        return (curve / normalization_factor).tolist()
+    
+    def _get_seasonal_curve(self, profile: HouseholdProfile) -> List[float]:
+        """Return cached seasonal curve for a profile (degree-day preferred)."""
+        weekend_factor = 1.0 + profile.weekend_increase
+        heating_weight = profile.heating_sensitivity if profile.heating_fuel != "gas" else 0.0
+        cooling_weight = profile.cooling_sensitivity  # still electric
+        strength = profile.seasonal_strength if profile.heating_fuel != "gas" else profile.seasonal_strength * 0.2
+        key = (
+            tuple(round(v, 3) for v in (heating_weight, cooling_weight)),
+            round(strength, 4),
+            round(weekend_factor, 4),
+            tuple(profile.monthly_hdd[:12]) if profile.monthly_hdd else None,
+            tuple(profile.monthly_cdd[:12]) if profile.monthly_cdd else None,
+        )
+        
+        if key not in self._seasonal_cache:
+            if profile.monthly_hdd and profile.monthly_cdd:
+                self._seasonal_cache[key] = self.generate_degree_day_curve(
+                    monthly_hdd=profile.monthly_hdd,
+                    monthly_cdd=profile.monthly_cdd,
+                    heating_weight=heating_weight,
+                    cooling_weight=cooling_weight,
+                    weekend_factor=weekend_factor
+                )
+            else:
+                self._seasonal_cache[key] = self.generate_gaussian_seasonal_curve(
+                    peak_month=1,
+                    strength=strength,
+                    weekend_factor=weekend_factor
+                )
+        return self._seasonal_cache[key]
+    
+    def _get_month_day_counts(self, month: int, year: Optional[int] = None) -> Tuple[int, int, int]:
+        """Return (days, weekdays, weekends) for a given month/year."""
+        if year is None:
+            year = datetime.now().year
+        _, days = calendar.monthrange(year, month)
+        weekdays = 0
+        weekends = 0
+        for day in range(1, days + 1):
+            dow = datetime(year, month, day).weekday()
+            if dow < 5:
+                weekdays += 1
+            else:
+                weekends += 1
+        return days, weekdays, weekends
+    
+    def _compute_daily_breakdown(self, profile: HouseholdProfile, month: int, year: Optional[int] = None) -> Dict[str, float]:
+        """
+        Compute weekday/weekend daily kWh split for a month, respecting base load,
+        optional custom monthly totals, and seasonal variation. Ensures the monthly
+        total is preserved after applying weekend uplift.
+        """
+        days_in_month, weekdays, weekends = self._get_month_day_counts(month, year)
+        if days_in_month == 0:
+            return {
+                'weekday_total': 0.0,
+                'weekend_total': 0.0,
+                'weekday_variable': 0.0,
+                'weekend_variable': 0.0,
+                'base_daily': 0.0
+            }
+        
+        weekend_factor = 1.0 + profile.weekend_increase
+        base_daily_target = profile.base_load_kwh_per_day
+        
+        # Determine variable portion for the month
+        if profile.custom_monthly_kwh:
+            idx = min(month - 1, len(profile.custom_monthly_kwh) - 1)
+            monthly_total = profile.custom_monthly_kwh[idx]
+            
+            if profile.custom_monthly_includes_base:
+                # Prevent base load from exceeding the provided total
+                max_base_daily = monthly_total / days_in_month
+                effective_base_daily = min(base_daily_target, max_base_daily)
+                variable_monthly = max(monthly_total - effective_base_daily * days_in_month, 0.0)
+            else:
+                effective_base_daily = base_daily_target
+                variable_monthly = max(monthly_total, 0.0)
+        else:
+            effective_base_daily = base_daily_target
+            variable_annual = max(profile.annual_consumption_kwh - effective_base_daily * 365.0, 0.0)
+            seasonal_curve = self._get_seasonal_curve(profile)
+            variable_daily_base = variable_annual / 365.0
+            variable_monthly = variable_daily_base * seasonal_curve[month - 1] * days_in_month
+        
+        denom = weekdays + weekend_factor * weekends
+        if denom == 0:
+            denom = 1.0
+        
+        weekday_variable = variable_monthly / denom
+        weekend_variable = weekday_variable * weekend_factor
+        
+        return {
+            'weekday_total': effective_base_daily + weekday_variable,
+            'weekend_total': effective_base_daily + weekend_variable,
+            'weekday_variable': weekday_variable,
+            'weekend_variable': weekend_variable,
+            'base_daily': effective_base_daily
+        }
+    
     def generate_workday_pattern(self, 
                                  pattern_type: str = 'working_family',
                                  peak_hour: int = 19) -> List[float]:
@@ -280,6 +440,84 @@ class ConsumptionPatternGenerator:
             return pattern
         return pattern[hours:] + pattern[:hours]
     
+    def _is_holiday(self, current_date: Optional[datetime], profile: HouseholdProfile) -> bool:
+        if not current_date or not profile.holiday_calendar:
+            return False
+        md = (current_date.month, current_date.day)
+        return md in profile.holiday_calendar
+    
+    def _resolve_pattern_type(self, profile: HouseholdProfile, day_of_week: int, weekend_like: bool) -> str:
+        if profile.occupancy_weekly_patterns and len(profile.occupancy_weekly_patterns) == 7:
+            override = profile.occupancy_weekly_patterns[day_of_week]
+            if override:
+                return override
+        if weekend_like:
+            return 'working_family' if profile.pattern_type == 'working_family' else profile.pattern_type
+        return profile.pattern_type
+    
+    def set_random_seed(self, seed: Optional[int]):
+        """Allow deterministic stochastic events."""
+        if seed is not None:
+            self.rng = np.random.default_rng(seed)
+    
+    def _add_event(self, events: List[float], hour: int, kwh: float, duration: int = 1):
+        for h in range(duration):
+            idx = (hour + h) % 24
+            events[idx] += kwh / duration
+    
+    def _draw_daily_events(self, is_weekday: bool, weekend_like: bool, electric_dhw: bool = True) -> Tuple[List[float], float]:
+        """
+        Generate simple stochastic events (meals, laundry, showers).
+        Returns per-hour kWh and total event kWh.
+        """
+        events = [0.0] * 24
+        total = 0.0
+        r = self.rng
+        
+        # Meals: breakfast, lunch, dinner with small noise
+        breakfast_hour = 7 if is_weekday else 8
+        lunch_hour = 12 if is_weekday else 13
+        dinner_hour = 19
+        meal_noise = lambda base: base * r.uniform(0.9, 1.1)
+        for h, base in [(breakfast_hour, 0.35), (lunch_hour, 0.45), (dinner_hour, 1.0)]:
+            val = meal_noise(base)
+            self._add_event(events, h, val, duration=1)
+            total += val
+        
+        # Laundry/dishwasher: higher chance on weekend/holiday
+        laundry_prob = 0.12 if is_weekday else 0.28
+        if r.random() < laundry_prob:
+            h = r.integers(9, 21)
+            val = r.uniform(1.2, 2.2)
+            duration = r.integers(1, 3)
+            self._add_event(events, h, val, duration=duration)
+            total += val
+        
+        # Showers/boiler spikes
+        morning_prob = 0.85
+        evening_prob = 0.5 if is_weekday else 0.65
+        if r.random() < morning_prob:
+            h = r.choice([6, 7, 8])
+            val = r.uniform(0.25, 0.45) if electric_dhw else 0.0
+            if val > 0:
+                self._add_event(events, h, val)
+                total += val
+        if r.random() < evening_prob:
+            h = r.choice([20, 21, 22])
+            val = r.uniform(0.25, 0.45) if electric_dhw else 0.0
+            if val > 0:
+                self._add_event(events, h, val)
+                total += val
+        
+        # Small variability buffer for weekend social cooking
+        if weekend_like:
+            h = r.choice([13, 14, 18, 19])
+            val = r.uniform(0.15, 0.30)
+            self._add_event(events, h, val)
+            total += val
+        
+        return events, total
+    
     def generate_weekend_pattern(self) -> List[float]:
         """
         Generate hourly consumption pattern for weekend
@@ -312,7 +550,18 @@ class ConsumptionPatternGenerator:
                                 annual_consumption_kwh: float,
                                 pattern_type: str = 'working_family',
                                 seasonal_strength: float = 0.2,
-                                peak_hour: int = 19) -> HouseholdProfile:
+                                peak_hour: int = 19,
+                                base_load_kwh_per_day: float = 4.0,
+                                custom_monthly_kwh: Optional[List[float]] = None,
+                                custom_monthly_includes_base: bool = True,
+                                monthly_hdd: Optional[List[float]] = None,
+                                monthly_cdd: Optional[List[float]] = None,
+                                heating_sensitivity: float = 0.6,
+                                cooling_sensitivity: float = 0.4,
+                                heating_fuel: str = "electric",
+                                dhw_fuel: str = "electric",
+                                holiday_calendar: Optional[List[Tuple[int, int]]] = None,
+                                occupancy_weekly_patterns: Optional[List[str]] = None) -> HouseholdProfile:
         """
         Create a complete household consumption profile
         
@@ -322,6 +571,17 @@ class ConsumptionPatternGenerator:
             pattern_type: Type of consumption pattern
             seasonal_strength: Strength of seasonal variation (0.0-1.0)
             peak_hour: Hour of peak evening consumption (0-23)
+            base_load_kwh_per_day: Always-on load (kWh/day)
+            custom_monthly_kwh: Optional monthly totals (kWh) to override seasonal curve
+            custom_monthly_includes_base: Whether monthly totals already include base load
+            monthly_hdd: Optional heating degree days per month (12 values)
+            monthly_cdd: Optional cooling degree days per month (12 values)
+            heating_sensitivity: Share of variable load driven by heating
+            cooling_sensitivity: Share driven by cooling
+            heating_fuel: "electric" or "gas" (gas zeroes heating electric load)
+            dhw_fuel: "electric" or "gas" for domestic hot water
+            holiday_calendar: List of (month, day) treated as weekend-like
+            occupancy_weekly_patterns: Optional 7-element list overriding pattern per weekday
         
         Returns:
             HouseholdProfile object
@@ -331,7 +591,18 @@ class ConsumptionPatternGenerator:
             annual_consumption_kwh=annual_consumption_kwh,
             pattern_type=pattern_type,
             seasonal_strength=seasonal_strength,
-            peak_evening_hour=peak_hour
+            peak_evening_hour=peak_hour,
+            base_load_kwh_per_day=base_load_kwh_per_day,
+            custom_monthly_kwh=custom_monthly_kwh,
+            custom_monthly_includes_base=custom_monthly_includes_base,
+            monthly_hdd=monthly_hdd,
+            monthly_cdd=monthly_cdd,
+            heating_sensitivity=heating_sensitivity,
+            cooling_sensitivity=cooling_sensitivity,
+            heating_fuel=heating_fuel,
+            dhw_fuel=dhw_fuel,
+            holiday_calendar=holiday_calendar,
+            occupancy_weekly_patterns=occupancy_weekly_patterns
         )
     
     def get_daily_consumption(self,
@@ -339,7 +610,9 @@ class ConsumptionPatternGenerator:
                              month: int,
                              is_weekday: bool = True,
                              day_of_week: int = 0,
-                             include_ev: bool = True) -> float:
+                             include_ev: bool = True,
+                             year: Optional[int] = None,
+                             current_date: Optional[datetime] = None) -> float:
         """
         Calculate daily consumption for a specific month and day type
         
@@ -349,33 +622,23 @@ class ConsumptionPatternGenerator:
             is_weekday: True for weekday, False for weekend
             day_of_week: Day of week (0=Monday, 6=Sunday)
             include_ev: Whether to include EV consumption
+            year: Calendar year to compute correct weekday/weekend counts
+            current_date: Optional exact date for holiday handling
         
         Returns:
             Daily consumption in kWh (household + EV if enabled)
         """
-        # Get seasonal multiplier
-        seasonal_curve = self.generate_gaussian_seasonal_curve(
-            peak_month=1,  # January peak
-            strength=profile.seasonal_strength
-        )
-        seasonal_multiplier = seasonal_curve[month - 1]
+        if current_date and self._is_holiday(current_date, profile):
+            is_weekday = False
         
-        # Calculate base daily consumption (household only)
-        base_daily = profile.annual_consumption_kwh / 365.0
-        
-        # Apply seasonal multiplier
-        daily = base_daily * seasonal_multiplier
-        
-        # Apply weekday/weekend adjustment
-        if not is_weekday:
-            daily *= (1.0 + profile.weekend_increase)
+        breakdown = self._compute_daily_breakdown(profile, month, year)
+        daily_household = breakdown['weekday_total'] if is_weekday else breakdown['weekend_total']
         
         # Add EV consumption if enabled
         if include_ev and profile.ev_profile and profile.ev_profile.enabled:
-            ev_consumption = self.get_ev_daily_consumption(profile.ev_profile, day_of_week)
-            daily += ev_consumption
+            daily_household += self.get_ev_daily_consumption(profile.ev_profile, day_of_week)
         
-        return daily
+        return daily_household
     
     def get_ev_daily_consumption(self, ev_profile: EVConsumptionProfile, day_of_week: int) -> float:
         """
@@ -430,7 +693,11 @@ class ConsumptionPatternGenerator:
                               month: int,
                               day_of_week: int,
                               hour: int,
-                              include_ev: bool = True) -> float:
+                              include_ev: bool = True,
+                              year: Optional[int] = None,
+                              current_date: Optional[datetime] = None,
+                              daily_events: Optional[List[float]] = None,
+                              daily_event_total: float = 0.0) -> float:
         """
         Get consumption for a specific hour (household + EV)
         
@@ -440,26 +707,54 @@ class ConsumptionPatternGenerator:
             day_of_week: Day of week (0=Monday, 6=Sunday)
             hour: Hour of day (0-23)
             include_ev: Whether to include EV consumption
+            year: Calendar year for accurate weekday/weekend split
+            current_date: Optional exact date for holiday handling
         
         Returns:
             Hourly consumption in kWh (household + EV if enabled)
         """
         is_weekday = day_of_week < 5  # Monday-Friday
+        weekend_like = not is_weekday
+        if current_date and self._is_holiday(current_date, profile):
+            weekend_like = True
+            is_weekday = False
         
-        # Get daily household consumption (without EV)
-        daily_household = self.get_daily_consumption(profile, month, is_weekday, day_of_week, include_ev=False)
-        
-        # Get hourly pattern for household
+        # Compute daily breakdown (base + variable) for the month
+        breakdown = self._compute_daily_breakdown(profile, month, year)
         if is_weekday:
+            variable_daily = breakdown['weekday_variable']
+        else:
+            variable_daily = breakdown['weekend_variable']
+        base_daily = breakdown['base_daily']
+        
+        # Get hourly pattern for household (with occupancy overrides)
+        pattern_type = self._resolve_pattern_type(profile, day_of_week, weekend_like)
+        if weekend_like:
+            pattern = self.generate_weekend_pattern()
+        else:
             pattern = self.generate_workday_pattern(
-                profile.pattern_type,
+                pattern_type,
                 profile.peak_evening_hour
             )
-        else:
-            pattern = self.generate_weekend_pattern()
         
-        # Calculate household hourly consumption
-        hourly_household = daily_household * pattern[hour]
+        # Stochastic event layer (drawn per day)
+        if daily_events is None:
+            events, event_total = self._draw_daily_events(
+                is_weekday=is_weekday,
+                weekend_like=weekend_like,
+                electric_dhw=profile.dhw_fuel != "gas"
+            )
+        else:
+            events = daily_events
+            event_total = daily_event_total
+        
+        # Preserve daily energy: shrink variable portion if events consume part of it
+        adjustable_variable = max(variable_daily - event_total, 0.0)
+        
+        # Spread base load evenly; distribute variable portion by pattern
+        hourly_base = base_daily / 24.0
+        hourly_variable = adjustable_variable * pattern[hour]
+        hourly_household = hourly_base + hourly_variable + events[hour]
         
         # Add EV consumption if enabled
         hourly_ev = 0.0
@@ -497,9 +792,22 @@ class ConsumptionPatternGenerator:
             month = current_date.month
             day_of_week = current_date.weekday()
             is_weekday = day_of_week < 5
+            year = current_date.year
+            is_holiday = self._is_holiday(current_date, profile)
+            weekend_like = (not is_weekday) or is_holiday
+            if is_holiday:
+                is_weekday = False
             
+            # Draw stochastic events once per day
+            daily_events, daily_event_total = self._draw_daily_events(
+                is_weekday=is_weekday and not is_holiday,
+                weekend_like=weekend_like,
+                electric_dhw=profile.dhw_fuel != "gas"
+            )
+
             # Get household consumption (without EV)
-            daily_household = self.get_daily_consumption(profile, month, is_weekday, day_of_week, include_ev=False)
+            daily_household = self.get_daily_consumption(profile, month, is_weekday, day_of_week,
+                                                         include_ev=False, year=year, current_date=current_date)
             
             # Get EV consumption for this day
             daily_ev = 0.0
@@ -518,7 +826,11 @@ class ConsumptionPatternGenerator:
             
             for hour in range(24):
                 # Household hourly
-                hourly_household = self.get_hourly_consumption(profile, month, day_of_week, hour, include_ev=False)
+                hourly_household = self.get_hourly_consumption(
+                    profile, month, day_of_week, hour,
+                    include_ev=False, year=year, current_date=current_date,
+                    daily_events=daily_events, daily_event_total=daily_event_total
+                )
                 day_hourly_household.append(hourly_household)
                 
                 # EV hourly
