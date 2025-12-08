@@ -28,27 +28,27 @@
                         <div class="form-grid">
                             <div class="form-row">
                                 <label for="power-amperes">Connected Power (Amperes):</label>
-                                <input type="number" id="power-amperes" value="25" step="1">
+                                <input type="number" id="power-amperes" value="16" step="1">
                             </div>
                             <div class="form-row">
                                 <label for="power-cost">Power Cost (EUR/A):</label>
-                                <input type="number" id="power-cost" value="0.50" step="0.01">
+                                <input type="number" id="power-cost" value="0.82" step="0.01">
                             </div>
                             <div class="form-row">
                                 <label for="electricity-cost">Electricity Cost (EUR/kWh):</label>
-                                <input type="number" id="electricity-cost" value="0.08" step="0.001">
+                                <input type="number" id="electricity-cost" value="0.10379" step="0.001">
                             </div>
                             <div class="form-row">
                                 <label for="transfer-cost">Transfer Cost (EUR/kWh):</label>
-                                <input type="number" id="transfer-cost" value="0.04" step="0.001">
+                                <input type="number" id="transfer-cost" value="0.03962" step="0.001">
                             </div>
                             <div class="form-row">
                                 <label for="service-cost">Service Cost (EUR/kWh):</label>
-                                <input type="number" id="service-cost" value="0.01" step="0.001">
+                                <input type="number" id="service-cost" value="0.01650" step="0.001">
                             </div>
                             <div class="form-row">
                                 <label for="monthly-service-fee">Monthly Service Fee (EUR):</label>
-                                <input type="number" id="monthly-service-fee" value="5.0" step="0.1">
+                                <input type="number" id="monthly-service-fee" value="0.83" step="0.1">
                             </div>
                             <div class="form-row">
                                 <label for="vat-rate">VAT Rate (%):</label>
@@ -63,7 +63,7 @@
                         <div class="form-grid">
                             <div class="form-row">
                                 <label for="monthly-consumption">Monthly Household Consumption (kWh):</label>
-                                <input type="number" id="monthly-consumption" value="500" step="10">
+                                <input type="number" id="monthly-consumption" value="250" step="10">
                                 <span class="hint">(household only, without EV)</span>
                             </div>
                             <div class="form-row">
@@ -97,58 +97,55 @@
                         <h2>PV System</h2>
                         <div class="checkbox-row">
                             <label>
-                                <input type="checkbox" id="pv-enabled" checked>
+                                <input type="checkbox" id="pv-enabled">
                                 Enable PV System Analysis
                             </label>
                         </div>
+                        <div class="collapsible-content" id="pv-collapsible">
                         <div class="form-grid">
                             <div class="form-row">
                                 <label for="pv-size">System Size (kWp):</label>
-                                <input type="number" id="pv-size" value="5.0" step="0.1">
+                                <input type="number" id="pv-size" value="9" step="0.1">
                             </div>
                             <div class="form-row">
                                 <label for="pv-cost">Installation Cost (EUR):</label>
-                                <input type="number" id="pv-cost" value="7000" step="100">
+                                <input type="number" id="pv-cost" value="2500" step="100">
                             </div>
                             <div class="form-row">
-                                <label for="pv-location">Location:</label>
-                                <select id="pv-location">
-                                    <option value="riga_latvia">Riga, Latvia (3.2 kWh/m²/day)</option>
-                                    <option value="vilnius_lithuania">Vilnius, Lithuania (3.3 kWh/m²/day)</option>
-                                    <option value="tallinn_estonia">Tallinn, Estonia (3.0 kWh/m²/day)</option>
-                                    <option value="helsinki_finland">Helsinki, Finland (2.8 kWh/m²/day)</option>
-                                    <option value="stockholm_sweden">Stockholm, Sweden (2.9 kWh/m²/day)</option>
-                                    <option value="oslo_norway">Oslo, Norway (2.7 kWh/m²/day)</option>
-                                    <option value="copenhagen_denmark">Copenhagen, Denmark (3.0 kWh/m²/day)</option>
-                                </select>
-                                <span class="hint">(V2: Auto-calculates irradiance)</span>
+                                <label for="pv-location">Address:</label>
+                                <div style="position: relative; width: 100%;">
+                                    <input type="text" id="pv-location" placeholder="Enter address (e.g., Riga, Latvia)" value="Riga, Latvia">
+                                    <div id="address-suggestions" class="address-suggestions"></div>
+                                    <span class="hint" id="location-status" style="display: block; margin-top: 5px; font-size: 12px;">
+                                        <i class="fas fa-check-circle" style="color: green;"></i> Location set
+                                    </span>
+                                </div>
                             </div>
                             <div class="form-row">
                                 <label for="pv-tilt">Panel Tilt Angle (°):</label>
-                                <input type="number" id="pv-tilt" value="35" min="0" max="90" step="1">
+                                <input type="number" id="pv-tilt" value="15" min="0" max="90" step="1">
                             </div>
                             <div class="form-row">
                                 <label for="pv-azimuth">Panel Azimuth (°):</label>
-                                <input type="number" id="pv-azimuth" value="0" min="-180" max="180" step="1">
+                                <input type="number" id="pv-azimuth" value="20" min="-180" max="180" step="1">
                                 <span class="hint">(0=South, 90=West, -90=East)</span>
                             </div>
                         </div>
-                        <div class="button-row">
-                            <button class="btn btn-success" id="fetch-pvgis-btn">
-                                <i class="fas fa-globe"></i> Fetch Real Solar Data from PVGIS
-                            </button>
-                        </div>
                         <div id="solar-data-source" class="data-source">
-                            📊 Using: Built-in solar model
+                            <i class="fas fa-spinner fa-spin"></i> Fetching solar data from PVGIS...
                         </div>
                         <div class="info-box success">
                             <p><strong>💡 Enhanced Solar Data:</strong></p>
                             <ul>
-                                <li>PVGIS: EU Science Hub's accurate satellite-based solar radiation data</li>
+                                <li><strong>PVGIS</strong> (<a href="https://re.jrc.ec.europa.eu/pvg_tools/en/" target="_blank">Photovoltaic Geographical Information System</a>): EU Science Hub's accurate satellite-based solar radiation data</li>
                                 <li>Weather: Historical cloud cover data for location-specific accuracy</li>
-                                <li>Accuracy: ±5-8% (vs ±15-25% with built-in model)</li>
-                                <li>No installation needed - uses direct API calls!</li>
+                                <li>Accuracy: ±5-8% (vs ±15-25% with built-in fallback model)</li>
+                                <li>Data source: © European Union, Joint Research Centre (JRC)</li>
                             </ul>
+                            <p style="font-size: 0.85em; margin-top: 10px; color: #28a745; font-weight: 500;">
+                                ✅ <strong>PVGIS data is automatically used for all calculations when available.</strong> Falls back to built-in model if unavailable.
+                            </p>
+                        </div>
                         </div>
                     </div>
 
@@ -157,18 +154,19 @@
                         <h2>Battery Storage (Optional)</h2>
                         <div class="checkbox-row">
                             <label>
-                                <input type="checkbox" id="battery-enabled" checked>
+                                <input type="checkbox" id="battery-enabled">
                                 Include Battery Storage
                             </label>
                         </div>
+                        <div class="collapsible-content" id="battery-collapsible">
                         <div class="form-grid">
                             <div class="form-row">
                                 <label for="battery-capacity">Battery Capacity (kWh):</label>
-                                <input type="number" id="battery-capacity" value="7.0" step="0.5">
+                                <input type="number" id="battery-capacity" value="14" step="0.5">
                             </div>
                             <div class="form-row">
                                 <label for="battery-cost">Battery Cost (EUR):</label>
-                                <input type="number" id="battery-cost" value="4000" step="100">
+                                <input type="number" id="battery-cost" value="2000" step="100">
                             </div>
                         </div>
                         <div class="info-box success">
@@ -177,6 +175,7 @@
                         <button class="btn btn-secondary" id="battery-recommendation-btn">
                             Calculate Recommended Battery Size
                         </button>
+                        </div>
                     </div>
 
                     <!-- Nord Pool Section -->
@@ -185,7 +184,7 @@
                         <div class="form-grid">
                             <div class="form-row">
                                 <label for="nordpool-price">Average Selling Price (EUR/kWh):</label>
-                                <input type="number" id="nordpool-price" value="0.06" step="0.001">
+                                <input type="number" id="nordpool-price" value="0.01" step="0.001">
                                 <span class="hint">(for excess energy sold to grid)</span>
                             </div>
                         </div>
@@ -200,6 +199,7 @@
                                 Include EV Charging
                             </label>
                         </div>
+                        <div class="collapsible-content" id="ev-collapsible">
                         <div class="form-grid">
                             <div class="form-row">
                                 <label for="ev-make">Make:</label>
@@ -236,23 +236,25 @@
                             </div>
                             <div class="form-row">
                                 <label for="ev-weekly-km">Weekly Distance (km):</label>
-                                <input type="number" id="ev-weekly-km" value="420" step="10">
+                                <input type="number" id="ev-weekly-km" value="315" step="10">
                             </div>
                             <div class="form-row">
                                 <label for="ev-charger-power">Home Charger Power (kW):</label>
-                                <input type="number" id="ev-charger-power" value="7.0" step="0.1">
+                                <input type="number" id="ev-charger-power" value="11" step="0.1">
                                 <span class="hint">(typical: 3.7, 7, 11, or 22 kW)</span>
                             </div>
                             <div class="form-row">
                                 <label for="ev-charging-start">Charging Start Time:</label>
-                                <input type="number" id="ev-charging-start" value="22" min="0" max="23" step="1">
+                                <input type="number" id="ev-charging-start" value="18" min="0" max="23" step="1">
                                 <span class="hint">:00 (charging continues until daily consumption is met)</span>
                             </div>
                         </div>
                         <div id="ev-duration-info" class="info-text"></div>
                         <div class="info-box info">
                             💡 Select your car to auto-fill consumption. Charging starts at selected time and continues until daily needs are met.<br>
-                            🌐 Real-world test data from Google Sheets - actual consumption at different speeds & temperatures!
+                            📊 <strong>EV Consumption Data:</strong> Real-world test data by <strong>Bjørn Nyland</strong> - 528 configurations with actual consumption at different speeds & temperatures.<br>
+                            🌐 Source: <a href="https://docs.google.com/spreadsheets/d/1V6ucyFGKWuSQzvI8lMzvvWJHrBS82echMVJH37kwgjE/" target="_blank">Bjørn Nyland's EV Test Database</a>
+                        </div>
                         </div>
                     </div>
 

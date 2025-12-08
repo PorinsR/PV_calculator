@@ -27,21 +27,29 @@ const SEASONAL_SOLAR_MULTIPLIERS = [
   0.3, // Jul-Dec
 ];
 
-// Seasonal multipliers for consumption (by month, 1-12)
-const SEASONAL_CONSUMPTION_MULTIPLIERS = [
+// Seasonal ratios for consumption (by month, 1-12)
+// These represent the desired seasonal pattern (higher in winter, lower in summer)
+// They will be normalized to ensure they sum to 12 (one year)
+const SEASONAL_CONSUMPTION_PATTERN = [
   1.25,
   1.2,
   1.1,
   1.0,
   0.9,
-  0.85, // Jan-Jun (higher in winter)
+  0.8, // Jan-Jun (higher in winter)
+  0.8,
+  0.8,
   0.85,
-  0.85,
-  0.9,
   1.0,
   1.1,
   1.2, // Jul-Dec
 ];
+
+// Normalize the pattern so the sum equals 12 (12 months)
+const patternSum = SEASONAL_CONSUMPTION_PATTERN.reduce((a, b) => a + b, 0);
+const SEASONAL_CONSUMPTION_MULTIPLIERS = SEASONAL_CONSUMPTION_PATTERN.map(
+  (v) => (v / patternSum) * 12
+);
 
 // Hourly consumption patterns
 const HOURLY_PATTERNS = {
@@ -125,30 +133,81 @@ function getHourlyConsumption(date, config) {
     ? HOURLY_PATTERNS[patternType].weekend
     : HOURLY_PATTERNS[patternType].weekday;
 
-  // Calculate daily average consumption
-  const monthlyConsumption =
+  // Step 1: Calculate daily consumption with smooth transitions between months
+  const monthlyAverage =
     parseFloat(config.consumption.monthly_consumption) || 500;
-  const annualConsumption = monthlyConsumption * 12;
-  const dailyBase = annualConsumption / 365;
-
-  // Apply seasonal multiplier
   const seasonalStrength =
     parseFloat(config.consumption.seasonal_strength) || 0.2;
-  const seasonalMultiplier =
+
+  // Get ratios for previous, current, and next month (with wraparound)
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const nextMonth = month === 12 ? 1 : month + 1;
+
+  const prevRatio =
+    1 +
+    (SEASONAL_CONSUMPTION_MULTIPLIERS[prevMonth - 1] - 1) * seasonalStrength;
+  const currRatio =
     1 + (SEASONAL_CONSUMPTION_MULTIPLIERS[month - 1] - 1) * seasonalStrength;
-  const dailyConsumption = dailyBase * seasonalMultiplier;
+  const nextRatio =
+    1 +
+    (SEASONAL_CONSUMPTION_MULTIPLIERS[nextMonth - 1] - 1) * seasonalStrength;
 
-  // Weekend adjustment (15% higher)
-  const weekendFactor = isWeekend ? 1.15 : 1.0;
-  const adjustedDaily = dailyConsumption * weekendFactor;
+  // Calculate daily averages for each month
+  const daysInPrevMonth = new Date(
+    date.getFullYear(),
+    month === 1 ? 12 : month - 1,
+    0
+  ).getDate();
+  const daysInMonth = new Date(date.getFullYear(), month, 0).getDate();
+  const daysInNextMonth = new Date(
+    date.getFullYear(),
+    month === 12 ? 1 : month + 1,
+    0
+  ).getDate();
 
-  // Normalize pattern and scale to daily consumption
+  const prevDailyAvg = (monthlyAverage * prevRatio) / daysInPrevMonth;
+  const currDailyAvg = (monthlyAverage * currRatio) / daysInMonth;
+  const nextDailyAvg = (monthlyAverage * nextRatio) / daysInNextMonth;
+
+  // Interpolate daily consumption based on position in month
+  // Creates smooth slope from prev month → current month → next month
+  const dayOfMonth = date.getDate();
+  const midMonth = daysInMonth / 2;
+
+  let baseDailyConsumption;
+  if (dayOfMonth <= midMonth) {
+    // First half: interpolate from prev month to current month
+    const t = dayOfMonth / midMonth; // 0 at start, 1 at middle
+    baseDailyConsumption = prevDailyAvg + (currDailyAvg - prevDailyAvg) * t;
+  } else {
+    // Second half: interpolate from current month to next month
+    const t = (dayOfMonth - midMonth) / (daysInMonth - midMonth); // 0 at middle, 1 at end
+    baseDailyConsumption = currDailyAvg + (nextDailyAvg - currDailyAvg) * t;
+  }
+
+  // Step 2: Apply weekend adjustment (15% higher)
+  const weekendFactor = 1.15;
+  const dailyConsumption = isWeekend
+    ? baseDailyConsumption * weekendFactor
+    : baseDailyConsumption;
+
+  // For monthly calculations, we still need the total
+  const thisMonthConsumption = monthlyAverage * currRatio;
+
+  // Step 3: Split daily consumption into baseline + peaks
+  // Baseline consumption (always-on devices): fridges, routers, standby, etc.
+  const baselineHourly = 0.16; // kWh per hour baseline
+  const baselineDaily = baselineHourly * 24;
+  const variableDaily = Math.max(0, dailyConsumption - baselineDaily);
+
+  // Step 4: Distribute variable consumption according to pattern
   const patternSum = pattern.reduce((a, b) => a + b, 0);
-  const hourlyConsumption = pattern.map(
-    (p) => (p / patternSum) * adjustedDaily
-  );
+  const hourlyConsumption = pattern.map((p) => {
+    const variableHourly = (p / patternSum) * variableDaily;
+    return baselineHourly + variableHourly;
+  });
 
-  // Add EV charging if enabled
+  // Step 5: Add EV charging if enabled (at fixed time every day)
   if (
     config.ev.enabled &&
     config.ev.consumption !== "--" &&
@@ -176,13 +235,36 @@ function getHourlyConsumption(date, config) {
 // Calculate hourly solar generation for a given date
 function getHourlySolarGeneration(date, config) {
   const month = date.getMonth() + 1; // 1-12
-  const location = config.pv.location || "riga_latvia";
   const pvSize = parseFloat(config.pv.size) || 5.0;
 
-  // Get base irradiance
-  const baseIrradiance = SOLAR_IRRADIANCE[location] || 3.2;
+  // Check if PVGIS data is available
+  if (config.pv.pvgisData && config.pv.pvgisData.monthly) {
+    const pvgisData = config.pv.pvgisData;
 
-  // Apply seasonal multiplier
+    // Get the monthly data for this month
+    const monthData = pvgisData.monthly.find((m) => m.month === month);
+
+    if (monthData) {
+      // Use PVGIS daily average energy (E_d) for this month
+      // Scale to current system size if different from when PVGIS was fetched
+      const scaleFactor = pvSize / pvgisData.systemSize;
+      const dailyGeneration = monthData.E_d * scaleFactor;
+
+      // Get hourly pattern and distribute daily generation
+      const pattern = getSolarGenerationPattern(month);
+      const patternSum = pattern.reduce((a, b) => a + b, 0);
+
+      const hourlyGeneration = pattern.map(
+        (p) => (p / patternSum) * dailyGeneration
+      );
+
+      return hourlyGeneration;
+    }
+  }
+
+  // Fallback to built-in solar model if PVGIS data not available
+  const location = config.pv.location || "riga_latvia";
+  const baseIrradiance = SOLAR_IRRADIANCE[location] || 3.2;
   const seasonalMultiplier = SEASONAL_SOLAR_MULTIPLIERS[month - 1];
   const dailyIrradiance = baseIrradiance * seasonalMultiplier;
 
@@ -191,7 +273,6 @@ function getHourlySolarGeneration(date, config) {
   const patternSum = pattern.reduce((a, b) => a + b, 0);
 
   // Calculate hourly generation
-  // Assuming ~4-5 peak sun hours equivalent per day on average
   const dailyGeneration = pvSize * dailyIrradiance * 0.85; // 85% system efficiency
   const hourlyGeneration = pattern.map(
     (p) => (p / patternSum) * dailyGeneration
@@ -361,18 +442,55 @@ function calculateAnnualAnalysis(config) {
   ];
 
   for (let month = 1; month <= 12; month++) {
-    // Simulate representative days for each month
+    // Simulate representative weekday and weekend days for each month
     const daysInMonth = new Date(2024, month, 0).getDate();
-    const midMonthDate = new Date(2024, month - 1, 15);
 
-    const dayResult = calculateDailyEnergyFlow(config, midMonthDate);
+    // Count weekdays and weekend days in the month
+    let weekdayCount = 0;
+    let weekendCount = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(2024, month - 1, day);
+      const dayOfWeek = date.getDay();
+      if (dayOfWeek === 0 || dayOfWeek === 6) {
+        weekendCount++;
+      } else {
+        weekdayCount++;
+      }
+    }
 
-    // Scale to month
-    const monthlyGen = dayResult.totals.generation * daysInMonth;
-    const monthlyCons = dayResult.totals.consumption * daysInMonth;
-    const monthlyImport = dayResult.totals.gridImport * daysInMonth;
-    const monthlyExport = dayResult.totals.gridExport * daysInMonth;
-    const selfSuff = dayResult.totals.selfSufficiency;
+    // Simulate a representative weekday and weekend
+    const weekdayDate = new Date(2024, month - 1, 15);
+    // Adjust to ensure it's a weekday
+    while (weekdayDate.getDay() === 0 || weekdayDate.getDay() === 6) {
+      weekdayDate.setDate(weekdayDate.getDate() + 1);
+    }
+
+    const weekendDate = new Date(2024, month - 1, 15);
+    // Adjust to ensure it's a weekend
+    while (weekendDate.getDay() !== 0 && weekendDate.getDay() !== 6) {
+      weekendDate.setDate(weekendDate.getDate() + 1);
+    }
+
+    const weekdayResult = calculateDailyEnergyFlow(config, weekdayDate);
+    const weekendResult = calculateDailyEnergyFlow(config, weekendDate);
+
+    // Calculate weighted monthly totals
+    const monthlyGen =
+      weekdayResult.totals.generation * weekdayCount +
+      weekendResult.totals.generation * weekendCount;
+    const monthlyCons =
+      weekdayResult.totals.consumption * weekdayCount +
+      weekendResult.totals.consumption * weekendCount;
+    const monthlyImport =
+      weekdayResult.totals.gridImport * weekdayCount +
+      weekendResult.totals.gridImport * weekendCount;
+    const monthlyExport =
+      weekdayResult.totals.gridExport * weekdayCount +
+      weekendResult.totals.gridExport * weekendCount;
+    const selfSuff =
+      (weekdayResult.totals.selfSufficiency * weekdayCount +
+        weekendResult.totals.selfSufficiency * weekendCount) /
+      daysInMonth;
 
     // Calculate costs (import minus export income)
     const costImport = monthlyImport * importRate;
@@ -434,135 +552,192 @@ function calculateEnergyDistribution(config) {
   };
 }
 
+// Helper function to calculate full year simulation (matching Python GUI)
+function calculateFullYearSimulation(config) {
+  let totalConsumption = 0;
+  let totalGridImport = 0;
+  let totalGridExport = 0;
+
+  // Simulate every day of the year
+  for (let dayOfYear = 1; dayOfYear <= 365; dayOfYear++) {
+    const date = new Date(2024, 0, dayOfYear);
+    const dayResult = calculateDailyEnergyFlow(config, date);
+
+    totalConsumption += dayResult.totals.consumption;
+    totalGridImport += dayResult.totals.gridImport;
+    totalGridExport += dayResult.totals.gridExport;
+  }
+
+  return {
+    consumption: totalConsumption,
+    gridImport: totalGridImport,
+    gridExport: totalGridExport,
+  };
+}
+
 // Calculate cumulative payback
 function calculateCumulativePayback(config) {
+  const pvEnabled = config.pv.enabled === true;
+  const batteryEnabled = config.battery.enabled === true;
+
   const pvCost = parseFloat(config.pv.cost) || 7000;
-  const batteryCost = config.battery.enabled
+  const batteryCost = batteryEnabled
     ? parseFloat(config.battery.cost) || 4000
     : 0;
   const totalInvestment = pvCost + batteryCost;
 
-  // Get annual analysis with PV+Battery (scenario 3)
-  const annual = calculateAnnualAnalysis(config);
-
-  // Calculate baseline cost (scenario 1: no PV)
-  const monthlyConsumption =
-    parseFloat(config.consumption.monthly_consumption) || 500;
+  // Calculate pricing rates (matching Python GUI exactly)
   const electricityCost = parseFloat(config.tariff.electricity_cost) || 0.08;
   const transferCost = parseFloat(config.tariff.transfer_cost) || 0.04;
   const serviceCost = parseFloat(config.tariff.service_cost) || 0.01;
   const vatRate = parseFloat(config.tariff.vat_rate) || 21;
+  const nordPoolPrice = parseFloat(config.nordpool.price) || 0.06;
+
   const importRate =
     (electricityCost + transferCost + serviceCost) * (1 + vatRate / 100);
+  const exportRate = Math.max(
+    0,
+    nordPoolPrice - transferCost * (1 + vatRate / 100)
+  );
 
-  // Scenario 1: All consumption from grid (no monthly fees in comparison)
-  const scenario1AnnualCost = monthlyConsumption * 12 * importRate;
-
-  // Scenario 3 annual cost (PV+Battery) - from simulation
-  const scenario3AnnualCost = annual.annualTotals.cost;
-
-  // Scenario 2 annual cost (PV Only) - approximate as 20% higher than PV+Battery
-  // Less battery = more grid import = higher cost
-  const scenario2AnnualCost =
-    scenario3AnnualCost + (scenario1AnnualCost - scenario3AnnualCost) * 0.25;
+  // SCENARIO 1: No PV, No Battery (Baseline)
+  // Calculate total consumption for the year with all variations
+  const config1 = JSON.parse(JSON.stringify(config));
+  config1.pv.enabled = false;
+  config1.battery.enabled = false;
+  const results1 = calculateFullYearSimulation(config1);
+  const scenario1AnnualCost = results1.consumption * importRate;
 
   const scenarios = {
-    noPV: { costs: [], label: "No PV System" },
-    pvOnly: { costs: [], label: "PV Only" },
-    pvBattery: { costs: [], label: "PV + Battery" },
+    noPV: { costs: [], label: "No PV System", enabled: true },
   };
 
   const years = 20;
 
+  // Always include baseline
   for (let year = 0; year <= years; year++) {
-    // Scenario 1: No PV - just accumulating annual electricity costs
     scenarios.noPV.costs.push(scenario1AnnualCost * year);
-
-    // Scenario 2: PV Only - upfront PV cost + annual operating costs
-    scenarios.pvOnly.costs.push(pvCost + scenario2AnnualCost * year);
-
-    // Scenario 3: PV + Battery - upfront costs + annual operating costs
-    scenarios.pvBattery.costs.push(
-      totalInvestment + scenario3AnnualCost * year
-    );
   }
 
-  // Calculate breakeven periods (when PV lines cross baseline)
-  const savings_pv_only = scenario1AnnualCost - scenario2AnnualCost;
-  const savings_pv_battery = scenario1AnnualCost - scenario3AnnualCost;
+  let scenario2AnnualCost = 0;
+  let scenario3AnnualCost = 0;
+
+  // SCENARIO 2: PV Only (No Battery) - only if PV is enabled
+  if (pvEnabled) {
+    const config2 = JSON.parse(JSON.stringify(config));
+    config2.pv.enabled = true;
+    config2.battery.enabled = false;
+    const results2 = calculateFullYearSimulation(config2);
+    scenario2AnnualCost =
+      results2.gridImport * importRate - results2.gridExport * exportRate;
+
+    scenarios.pvOnly = { costs: [], label: "PV Only", enabled: true };
+    for (let year = 0; year <= years; year++) {
+      scenarios.pvOnly.costs.push(pvCost + scenario2AnnualCost * year);
+    }
+  }
+
+  // SCENARIO 3: PV + Battery (Full System) - only if both PV and Battery are enabled
+  if (pvEnabled && batteryEnabled) {
+    const config3 = JSON.parse(JSON.stringify(config));
+    config3.pv.enabled = true;
+    config3.battery.enabled = true;
+    const results3 = calculateFullYearSimulation(config3);
+    scenario3AnnualCost =
+      results3.gridImport * importRate - results3.gridExport * exportRate;
+
+    scenarios.pvBattery = { costs: [], label: "PV + Battery", enabled: true };
+    for (let year = 0; year <= years; year++) {
+      scenarios.pvBattery.costs.push(
+        totalInvestment + scenario3AnnualCost * year
+      );
+    }
+  }
+
+  // Calculate savings and breakeven periods
+  const savings_pv_only = pvEnabled
+    ? scenario1AnnualCost - scenario2AnnualCost
+    : 0;
+  const savings_pv_battery =
+    pvEnabled && batteryEnabled ? scenario1AnnualCost - scenario3AnnualCost : 0;
 
   return {
     years: Array.from({ length: years + 1 }, (_, i) => i),
     scenarios: scenarios,
     breakeven: {
-      pvOnly: savings_pv_only > 0 ? Math.ceil(pvCost / savings_pv_only) : 999,
+      pvOnly:
+        pvEnabled && savings_pv_only > 0
+          ? Math.ceil(pvCost / savings_pv_only)
+          : 999,
       pvBattery:
-        savings_pv_battery > 0
+        pvEnabled && batteryEnabled && savings_pv_battery > 0
           ? Math.ceil(totalInvestment / savings_pv_battery)
           : 999,
+    },
+    annualCosts: {
+      scenario1: scenario1AnnualCost,
+      scenario2: scenario2AnnualCost,
+      scenario3: scenario3AnnualCost,
     },
   };
 }
 
 // Generate comparison summary
 function generateComparisonSummary(config) {
+  const pvEnabled = config.pv.enabled === true;
+  const batteryEnabled = config.battery.enabled === true;
+
   const annual = calculateAnnualAnalysis(config);
   const payback = calculateCumulativePayback(config);
 
   const pvCost = parseFloat(config.pv.cost) || 7000;
-  const batteryCost = config.battery.enabled
+  const batteryCost = batteryEnabled
     ? parseFloat(config.battery.cost) || 4000
     : 0;
 
-  // Calculate what the annual cost would be without PV
-  const monthlyConsumption =
-    parseFloat(config.consumption.monthly_consumption) || 500;
-  const electricityCost = parseFloat(config.tariff.electricity_cost) || 0.08;
-  const transferCost = parseFloat(config.tariff.transfer_cost) || 0.04;
-  const serviceCost = parseFloat(config.tariff.service_cost) || 0.01;
-  const vatRate = parseFloat(config.tariff.vat_rate) || 21;
-  const importRate =
-    (electricityCost + transferCost + serviceCost) * (1 + vatRate / 100);
+  // Use the correctly calculated scenario costs from payback calculation
+  const scenario1Cost = payback.annualCosts.scenario1;
+  const scenario2Cost = payback.annualCosts.scenario2;
+  const scenario3Cost = payback.annualCosts.scenario3;
 
-  // Baseline cost: all consumption from grid (monthly fees not included in comparison)
-  const annualCostNoPV = monthlyConsumption * 12 * importRate;
-
-  // For PV Only scenario: estimate operating cost (without battery, more grid import)
-  // Without battery, self-consumption is lower, so more expensive than PV+Battery
-  const pvOnlyOperatingCost = annual.annualTotals.cost * 1.3;
-
-  return {
+  const summary = {
     scenarios: {
       noPV: {
-        annualCost: annualCostNoPV,
-        monthlyCost: annualCostNoPV / 12,
-        twentyYearCost: annualCostNoPV * 20,
+        enabled: true,
+        annualCost: scenario1Cost,
+        twentyYearCost: scenario1Cost * 20,
         selfSufficiency: 0,
         gridDependency: 100,
-      },
-      pvOnly: {
-        initialInvestment: pvCost,
-        // Annual cost = ONLY operating cost (electricity bill), NOT including amortized investment
-        annualCost: pvOnlyOperatingCost,
-        monthlyCost: pvOnlyOperatingCost / 12,
-        twentyYearCost: payback.scenarios.pvOnly.costs[20],
-        annualSavings: annualCostNoPV - pvOnlyOperatingCost,
-        breakeven: payback.breakeven.pvOnly,
-        selfSufficiency: annual.annualTotals.selfSufficiency * 0.8,
-        gridDependency: 100 - annual.annualTotals.selfSufficiency * 0.8,
-      },
-      pvBattery: {
-        initialInvestment: pvCost + batteryCost,
-        // Annual cost = ONLY operating cost (electricity bill), NOT including amortized investment
-        annualCost: annual.annualTotals.cost,
-        monthlyCost: annual.annualTotals.cost / 12,
-        twentyYearCost: payback.scenarios.pvBattery.costs[20],
-        annualSavings: annualCostNoPV - annual.annualTotals.cost,
-        breakeven: payback.breakeven.pvBattery,
-        selfSufficiency: annual.annualTotals.selfSufficiency,
-        gridDependency: 100 - annual.annualTotals.selfSufficiency,
       },
     },
     annual: annual,
   };
+
+  if (pvEnabled) {
+    summary.scenarios.pvOnly = {
+      enabled: true,
+      initialInvestment: pvCost,
+      annualCost: scenario2Cost,
+      twentyYearCost: payback.scenarios.pvOnly.costs[20],
+      annualSavings: scenario1Cost - scenario2Cost,
+      breakeven: payback.breakeven.pvOnly,
+      selfSufficiency: annual.annualTotals.selfSufficiency * 0.7, // Estimate ~70% of PV+Battery
+      gridDependency: 100 - annual.annualTotals.selfSufficiency * 0.7,
+    };
+  }
+
+  if (pvEnabled && batteryEnabled) {
+    summary.scenarios.pvBattery = {
+      enabled: true,
+      initialInvestment: pvCost + batteryCost,
+      annualCost: scenario3Cost,
+      twentyYearCost: payback.scenarios.pvBattery.costs[20],
+      annualSavings: scenario1Cost - scenario3Cost,
+      breakeven: payback.breakeven.pvBattery,
+      selfSufficiency: annual.annualTotals.selfSufficiency,
+      gridDependency: 100 - annual.annualTotals.selfSufficiency,
+    };
+  }
+
+  return summary;
 }

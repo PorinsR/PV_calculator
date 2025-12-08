@@ -1,10 +1,16 @@
 // PV Calculator - Main Application Logic
 
+// Global state for location
+let currentLocationCoords = { lat: 56.95, lon: 24.11, name: "Riga, Latvia" };
+let addressSearchTimeout = null;
+let pvgisMonthlyData = null; // Store PVGIS monthly generation data
+
 // Initialize application
 document.addEventListener("DOMContentLoaded", function () {
   initializeTabs();
   initializeFormElements();
   initializeEVDatabase();
+  initializeAddressAutocomplete();
   loadConfiguration();
 
   // Add event listeners for buttons
@@ -20,9 +26,6 @@ document.addEventListener("DOMContentLoaded", function () {
   document
     .getElementById("battery-recommendation-btn")
     .addEventListener("click", showBatteryRecommendation);
-  document
-    .getElementById("fetch-pvgis-btn")
-    .addEventListener("click", fetchPVGISData);
 
   // Analysis tab buttons
   document
@@ -91,6 +94,37 @@ function initializeFormElements() {
       element.addEventListener("input", updateEVChargingDuration);
     }
   );
+
+  // Collapsible sections
+  initializeCollapsibleSections();
+}
+
+// Initialize collapsible section behavior
+function initializeCollapsibleSections() {
+  const sections = [
+    { checkboxId: "pv-enabled", collapsibleId: "pv-collapsible" },
+    { checkboxId: "battery-enabled", collapsibleId: "battery-collapsible" },
+    { checkboxId: "ev-enabled", collapsibleId: "ev-collapsible" },
+  ];
+
+  sections.forEach(({ checkboxId, collapsibleId }) => {
+    const checkbox = document.getElementById(checkboxId);
+    const collapsible = document.getElementById(collapsibleId);
+
+    // Set initial state (expanded if checked)
+    if (!checkbox.checked) {
+      collapsible.classList.add("collapsed");
+    }
+
+    // Toggle on checkbox change
+    checkbox.addEventListener("change", function () {
+      if (this.checked) {
+        collapsible.classList.remove("collapsed");
+      } else {
+        collapsible.classList.add("collapsed");
+      }
+    });
+  });
 }
 
 // Initialize EV database
@@ -217,8 +251,10 @@ function getConfiguration() {
       size: document.getElementById("pv-size").value,
       cost: document.getElementById("pv-cost").value,
       location: document.getElementById("pv-location").value,
+      location_coords: currentLocationCoords,
       tilt: document.getElementById("pv-tilt").value,
       azimuth: document.getElementById("pv-azimuth").value,
+      pvgisData: pvgisMonthlyData, // Include PVGIS data if available
     },
     battery: {
       enabled: document.getElementById("battery-enabled").checked,
@@ -245,24 +281,24 @@ function setConfiguration(config) {
   // Tariff
   if (config.tariff) {
     document.getElementById("power-amperes").value =
-      config.tariff.power_amperes || 25;
+      config.tariff.power_amperes || 16;
     document.getElementById("power-cost").value =
-      config.tariff.power_cost || 0.5;
+      config.tariff.power_cost || 0.82;
     document.getElementById("electricity-cost").value =
-      config.tariff.electricity_cost || 0.08;
+      config.tariff.electricity_cost || 0.10379;
     document.getElementById("transfer-cost").value =
-      config.tariff.transfer_cost || 0.04;
+      config.tariff.transfer_cost || 0.03962;
     document.getElementById("service-cost").value =
-      config.tariff.service_cost || 0.01;
+      config.tariff.service_cost || 0.0165;
     document.getElementById("monthly-service-fee").value =
-      config.tariff.monthly_service_fee || 5.0;
+      config.tariff.monthly_service_fee || 0.83;
     document.getElementById("vat-rate").value = config.tariff.vat_rate || 21;
   }
 
   // Consumption
   if (config.consumption) {
     document.getElementById("monthly-consumption").value =
-      config.consumption.monthly_consumption || 500;
+      config.consumption.monthly_consumption || 250;
     document.getElementById("consumption-pattern").value =
       config.consumption.pattern_type || "working_family";
     const seasonalValue = parseFloat(
@@ -275,28 +311,51 @@ function setConfiguration(config) {
 
   // PV
   if (config.pv) {
-    document.getElementById("pv-enabled").checked = config.pv.enabled !== false;
-    document.getElementById("pv-size").value = config.pv.size || 5.0;
-    document.getElementById("pv-cost").value = config.pv.cost || 7000;
+    document.getElementById("pv-enabled").checked = config.pv.enabled === true;
+    document.getElementById("pv-size").value = config.pv.size || 9;
+    document.getElementById("pv-cost").value = config.pv.cost || 2500;
     document.getElementById("pv-location").value =
-      config.pv.location || "riga_latvia";
-    document.getElementById("pv-tilt").value = config.pv.tilt || 35;
-    document.getElementById("pv-azimuth").value = config.pv.azimuth || 0;
+      config.pv.location || "Riga, Latvia";
+    document.getElementById("pv-tilt").value = config.pv.tilt || 15;
+    document.getElementById("pv-azimuth").value = config.pv.azimuth || 20;
+
+    // If location coordinates are saved, restore them
+    if (config.pv.location_coords) {
+      currentLocationCoords = config.pv.location_coords;
+    }
+
+    // Trigger collapsible update
+    const pvCheckbox = document.getElementById("pv-enabled");
+    const pvCollapsible = document.getElementById("pv-collapsible");
+    if (pvCheckbox.checked) {
+      pvCollapsible.classList.remove("collapsed");
+    } else {
+      pvCollapsible.classList.add("collapsed");
+    }
   }
 
   // Battery
   if (config.battery) {
     document.getElementById("battery-enabled").checked =
-      config.battery.enabled !== false;
+      config.battery.enabled === true;
     document.getElementById("battery-capacity").value =
-      config.battery.capacity || 7.0;
-    document.getElementById("battery-cost").value = config.battery.cost || 4000;
+      config.battery.capacity || 14;
+    document.getElementById("battery-cost").value = config.battery.cost || 2000;
+
+    // Trigger collapsible update
+    const batteryCheckbox = document.getElementById("battery-enabled");
+    const batteryCollapsible = document.getElementById("battery-collapsible");
+    if (batteryCheckbox.checked) {
+      batteryCollapsible.classList.remove("collapsed");
+    } else {
+      batteryCollapsible.classList.add("collapsed");
+    }
   }
 
   // Nord Pool
   if (config.nordpool) {
     document.getElementById("nordpool-price").value =
-      config.nordpool.price || 0.06;
+      config.nordpool.price || 0.01;
   }
 
   // EV
@@ -332,11 +391,20 @@ function setConfiguration(config) {
       }, 100);
     }
 
-    document.getElementById("ev-weekly-km").value = config.ev.weekly_km || 420;
+    document.getElementById("ev-weekly-km").value = config.ev.weekly_km || 315;
     document.getElementById("ev-charger-power").value =
-      config.ev.charger_power || 7.0;
+      config.ev.charger_power || 11;
     document.getElementById("ev-charging-start").value =
-      config.ev.charging_start || 22;
+      config.ev.charging_start || 18;
+
+    // Trigger collapsible update
+    const evCheckbox = document.getElementById("ev-enabled");
+    const evCollapsible = document.getElementById("ev-collapsible");
+    if (evCheckbox.checked) {
+      evCollapsible.classList.remove("collapsed");
+    } else {
+      evCollapsible.classList.add("collapsed");
+    }
   }
 }
 
@@ -412,40 +480,118 @@ function showBatteryRecommendation() {
 }
 
 // PVGIS Data Fetching
-async function fetchPVGISData() {
-  const btn = document.getElementById("fetch-pvgis-btn");
-  const originalText = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Fetching data...';
+// Initialize address autocomplete
+function initializeAddressAutocomplete() {
+  const locationInput = document.getElementById("pv-location");
+  const suggestionsDiv = document.getElementById("address-suggestions");
+  const statusSpan = document.getElementById("location-status");
+
+  // Search for addresses as user types
+  locationInput.addEventListener("input", async function () {
+    const query = locationInput.value.trim();
+
+    if (query.length < 3) {
+      suggestionsDiv.classList.remove("show");
+      return;
+    }
+
+    // Debounce search
+    clearTimeout(addressSearchTimeout);
+    addressSearchTimeout = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+            query
+          )}&limit=5`,
+          {
+            headers: {
+              "User-Agent": "PV Calculator Web App",
+            },
+          }
+        );
+        const results = await response.json();
+
+        if (results.length > 0) {
+          suggestionsDiv.innerHTML = results
+            .map(
+              (result) => `
+            <div class="suggestion-item" data-lat="${result.lat}" data-lon="${result.lon}" data-name="${result.display_name}">
+              ${result.display_name}
+            </div>
+          `
+            )
+            .join("");
+
+          suggestionsDiv.classList.add("show");
+
+          // Add click handlers
+          document.querySelectorAll(".suggestion-item").forEach((item) => {
+            item.addEventListener("click", function () {
+              const lat = parseFloat(this.dataset.lat);
+              const lon = parseFloat(this.dataset.lon);
+              const name = this.dataset.name;
+
+              currentLocationCoords = { lat, lon, name };
+              locationInput.value = name;
+              suggestionsDiv.classList.remove("show");
+
+              statusSpan.innerHTML =
+                '<i class="fas fa-check-circle" style="color: green;"></i> Location set';
+
+              // Automatically fetch PVGIS data
+              fetchPVGISDataAuto();
+            });
+          });
+        } else {
+          suggestionsDiv.classList.remove("show");
+        }
+      } catch (error) {
+        console.error("Address search error:", error);
+        suggestionsDiv.classList.remove("show");
+      }
+    }, 500);
+  });
+
+  // Close suggestions when clicking outside
+  document.addEventListener("click", function (e) {
+    if (
+      !locationInput.contains(e.target) &&
+      !suggestionsDiv.contains(e.target)
+    ) {
+      suggestionsDiv.classList.remove("show");
+    }
+  });
+
+  // Fetch initial PVGIS data on load
+  setTimeout(() => fetchPVGISDataAuto(), 1000);
+
+  // Auto-refresh PVGIS data when PV parameters change
+  ["pv-size", "pv-tilt", "pv-azimuth"].forEach((id) => {
+    document.getElementById(id).addEventListener("change", () => {
+      fetchPVGISDataAuto();
+    });
+  });
+}
+
+// Automatic PVGIS data fetch (no button, runs in background)
+// PVGIS: Photovoltaic Geographical Information System
+// © European Union, Joint Research Centre (JRC)
+// More info: https://re.jrc.ec.europa.eu/pvg_tools/en/
+async function fetchPVGISDataAuto() {
+  const statusDiv = document.getElementById("solar-data-source");
+  statusDiv.innerHTML =
+    '<i class="fas fa-spinner fa-spin"></i> Fetching solar data from PVGIS...';
 
   try {
-    const location = document.getElementById("pv-location").value;
     const pvSize = parseFloat(document.getElementById("pv-size").value) || 5.0;
     const tilt = parseFloat(document.getElementById("pv-tilt").value) || 35;
     const azimuth =
       parseFloat(document.getElementById("pv-azimuth").value) || 0;
 
-    // Location coordinates mapping
-    const locationCoords = {
-      riga_latvia: { lat: 56.95, lon: 24.11, name: "Riga, Latvia" },
-      vilnius_lithuania: { lat: 54.69, lon: 25.28, name: "Vilnius, Lithuania" },
-      tallinn_estonia: { lat: 59.44, lon: 24.75, name: "Tallinn, Estonia" },
-      helsinki_finland: { lat: 60.17, lon: 24.94, name: "Helsinki, Finland" },
-      stockholm_sweden: { lat: 59.33, lon: 18.06, name: "Stockholm, Sweden" },
-      oslo_norway: { lat: 59.91, lon: 10.75, name: "Oslo, Norway" },
-      copenhagen_denmark: {
-        lat: 55.68,
-        lon: 12.57,
-        name: "Copenhagen, Denmark",
-      },
-    };
-
-    const coords = locationCoords[location];
-    if (!coords) {
-      throw new Error("Location not found");
-    }
+    const coords = currentLocationCoords;
 
     // Construct PVGIS API URL with CORS proxy
+    // PVGIS API documentation: https://joint-research-centre.ec.europa.eu/pvgis-photovoltaic-geographical-information-system/getting-started-pvgis/api-non-interactive-service_en
     const pvgisUrl = `https://re.jrc.ec.europa.eu/api/v5_2/PVcalc?lat=${coords.lat}&lon=${coords.lon}&peakpower=${pvSize}&loss=14&angle=${tilt}&aspect=${azimuth}&outputformat=json`;
 
     // Try with CORS proxy first
@@ -459,18 +605,29 @@ async function fetchPVGISData() {
 
     const data = await response.json();
 
-    if (data.outputs && data.outputs.totals) {
+    if (data.outputs && data.outputs.totals && data.outputs.monthly) {
       const annualProduction = data.outputs.totals.fixed.E_y;
       const avgDaily = annualProduction / 365;
 
-      document.getElementById(
-        "solar-data-source"
-      ).innerHTML = `✅ Using: PVGIS Real Data - Annual: ${annualProduction.toFixed(
+      // Store monthly data for calculations
+      pvgisMonthlyData = {
+        monthly: data.outputs.monthly.fixed.map((m) => ({
+          month: m.month,
+          E_m: m.E_m, // Monthly energy output (kWh)
+          H_sun: m.H_sun, // Average daily sun hours
+          E_d: m.E_d, // Average daily energy (kWh)
+        })),
+        annualProduction: annualProduction,
+        systemSize: pvSize,
+        location: currentLocationCoords,
+      };
+
+      statusDiv.innerHTML = `✅ Using: PVGIS Real Data - Annual: ${annualProduction.toFixed(
         0
       )} kWh/year, Daily Avg: ${avgDaily.toFixed(1)} kWh/day`;
 
       showToast(
-        `PVGIS data fetched successfully! Annual production: ${annualProduction.toFixed(
+        `PVGIS data fetched! Annual production: ${annualProduction.toFixed(
           0
         )} kWh`,
         "success"
@@ -479,16 +636,13 @@ async function fetchPVGISData() {
       throw new Error("Invalid PVGIS response");
     }
   } catch (error) {
-    // Show more helpful error message
-    const errorMsg =
-      error.message.includes("NetworkError") || error.message.includes("CORS")
-        ? "PVGIS API unavailable (CORS restriction). Using built-in solar model instead."
-        : "Error: " + error.message;
+    // Fallback to built-in solar model
+    console.log("PVGIS fetch failed, using built-in solar model:", error);
 
-    showToast(errorMsg, "warning");
+    // Clear PVGIS data to force fallback to built-in model
+    pvgisMonthlyData = null;
 
-    // Provide alternative: manual calculation link
-    const coords = locationCoords[document.getElementById("pv-location").value];
+    const coords = currentLocationCoords;
     const pvSize = parseFloat(document.getElementById("pv-size").value) || 5.0;
     const tilt = parseFloat(document.getElementById("pv-tilt").value) || 35;
     const azimuth =
@@ -496,12 +650,9 @@ async function fetchPVGISData() {
 
     const pvgisManualUrl = `https://re.jrc.ec.europa.eu/pvg_tools/en/#PVP?lat=${coords.lat}&lon=${coords.lon}&peakpower=${pvSize}&loss=14&angle=${tilt}&aspect=${azimuth}`;
 
-    document.getElementById("solar-data-source").innerHTML =
+    statusDiv.innerHTML =
       `📊 Using: Built-in solar model<br>` +
       `<small>For accurate data, visit: <a href="${pvgisManualUrl}" target="_blank">PVGIS Calculator</a></small>`;
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = originalText;
   }
 }
 
@@ -534,11 +685,6 @@ function generateDailyFlow() {
   const config = getConfiguration();
   const date = document.getElementById("analysis-date").value;
 
-  if (!config.pv.enabled) {
-    showToast("Please enable PV System to use this feature", "warning");
-    return;
-  }
-
   document.getElementById(
     "analysis-status"
   ).textContent = `Calculating daily energy flow for ${date}...`;
@@ -555,11 +701,6 @@ function generateDailyFlow() {
 function generateAnnualAnalysis() {
   const config = getConfiguration();
 
-  if (!config.pv.enabled) {
-    showToast("Please enable PV System to use this feature", "warning");
-    return;
-  }
-
   document.getElementById("analysis-status").textContent =
     "Calculating annual analysis...";
 
@@ -572,11 +713,6 @@ function generateAnnualAnalysis() {
 
 function generateEnergyDistribution() {
   const config = getConfiguration();
-
-  if (!config.pv.enabled) {
-    showToast("Please enable PV System to use this feature", "warning");
-    return;
-  }
 
   document.getElementById("analysis-status").textContent =
     "Calculating energy distribution...";
@@ -591,11 +727,6 @@ function generateEnergyDistribution() {
 function generateCumulativePayback() {
   const config = getConfiguration();
 
-  if (!config.pv.enabled) {
-    showToast("Please enable PV System to use this feature", "warning");
-    return;
-  }
-
   document.getElementById("analysis-status").textContent =
     "Calculating cumulative payback...";
 
@@ -608,11 +739,6 @@ function generateCumulativePayback() {
 
 function generateSummaryReport() {
   const config = getConfiguration();
-
-  if (!config.pv.enabled) {
-    showToast("Please enable PV System to use this feature", "warning");
-    return;
-  }
 
   document.getElementById("analysis-status").textContent =
     "Generating summary report...";

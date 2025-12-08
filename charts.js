@@ -39,38 +39,38 @@ function displayDailyFlowChart(data) {
         <div class="summary-card">
             <h4>Total Consumption</h4>
             <div class="value">${data.totals.consumption.toFixed(
-    1
-  )}<span class="unit">kWh</span></div>
+              1
+            )}<span class="unit">kWh</span></div>
         </div>
         <div class="summary-card">
             <h4>Solar Generation</h4>
             <div class="value">${data.totals.generation.toFixed(
-    1
-  )}<span class="unit">kWh</span></div>
+              1
+            )}<span class="unit">kWh</span></div>
         </div>
         <div class="summary-card">
             <h4>Grid Import</h4>
             <div class="value">${data.totals.gridImport.toFixed(
-    1
-  )}<span class="unit">kWh</span></div>
+              1
+            )}<span class="unit">kWh</span></div>
         </div>
         <div class="summary-card">
             <h4>Grid Export</h4>
             <div class="value">${data.totals.gridExport.toFixed(
-    1
-  )}<span class="unit">kWh</span></div>
+              1
+            )}<span class="unit">kWh</span></div>
         </div>
         <div class="summary-card">
             <h4>Self-Sufficiency</h4>
             <div class="value">${data.totals.selfSufficiency.toFixed(
-    1
-  )}<span class="unit">%</span></div>
+              1
+            )}<span class="unit">%</span></div>
         </div>
         <div class="summary-card">
             <h4>Battery SOC (End)</h4>
             <div class="value">${data.batterySoc[23].toFixed(
-    0
-  )}<span class="unit">%</span></div>
+              0
+            )}<span class="unit">%</span></div>
         </div>
     `;
   container.appendChild(summaryDiv);
@@ -308,44 +308,44 @@ function displayAnnualAnalysisChart(data) {
             <div class="summary-card">
                 <h4>Total Generation</h4>
                 <div class="value">${data.annualTotals.generation.toFixed(
-    0
-  )}<span class="unit">kWh/year</span></div>
+                  0
+                )}<span class="unit">kWh/year</span></div>
             </div>
             <div class="summary-card">
                 <h4>Total Consumption</h4>
                 <div class="value">${data.annualTotals.consumption.toFixed(
-    0
-  )}<span class="unit">kWh/year</span></div>
+                  0
+                )}<span class="unit">kWh/year</span></div>
             </div>
             <div class="summary-card">
                 <h4>Grid Import</h4>
                 <div class="value">${data.annualTotals.gridImport.toFixed(
-    0
-  )}<span class="unit">kWh/year</span></div>
+                  0
+                )}<span class="unit">kWh/year</span></div>
             </div>
             <div class="summary-card">
                 <h4>Grid Export</h4>
                 <div class="value">${data.annualTotals.gridExport.toFixed(
-    0
-  )}<span class="unit">kWh/year</span></div>
+                  0
+                )}<span class="unit">kWh/year</span></div>
             </div>
             <div class="summary-card">
                 <h4>Annual Cost</h4>
                 <div class="value">€${data.annualTotals.cost.toFixed(
-    2
-  )}<span class="unit">/year</span></div>
+                  2
+                )}<span class="unit">/year</span></div>
             </div>
             <div class="summary-card">
                 <h4>Annual Savings</h4>
                 <div class="value">€${data.annualTotals.savings.toFixed(
-    2
-  )}<span class="unit">/year</span></div>
+                  2
+                )}<span class="unit">/year</span></div>
             </div>
             <div class="summary-card">
                 <h4>Avg Self-Sufficiency</h4>
                 <div class="value">${data.annualTotals.selfSufficiency.toFixed(
-    1
-  )}<span class="unit">%</span></div>
+                  1
+                )}<span class="unit">%</span></div>
             </div>
         </div>
     `;
@@ -421,26 +421,26 @@ function displayEnergyDistributionChart(data) {
         <div class="summary-card">
             <h4>Direct Self-Consumption</h4>
             <div class="value">${data.values[0].toFixed(
-    0
-  )}<span class="unit">kWh</span></div>
+              0
+            )}<span class="unit">kWh</span></div>
         </div>
         <div class="summary-card">
             <h4>Battery Storage</h4>
             <div class="value">${data.values[1].toFixed(
-    0
-  )}<span class="unit">kWh</span></div>
+              0
+            )}<span class="unit">kWh</span></div>
         </div>
         <div class="summary-card">
             <h4>Grid Export</h4>
             <div class="value">${data.values[2].toFixed(
-    0
-  )}<span class="unit">kWh</span></div>
+              0
+            )}<span class="unit">kWh</span></div>
         </div>
         <div class="summary-card">
             <h4>Grid Import</h4>
             <div class="value">${data.values[3].toFixed(
-    0
-  )}<span class="unit">kWh</span></div>
+              0
+            )}<span class="unit">kWh</span></div>
         </div>
     `;
   container.appendChild(summaryDiv);
@@ -463,36 +463,51 @@ function displayCumulativePaybackChart(data) {
 
   destroyChart("paybackChart");
   const ctx = document.getElementById("paybackChart").getContext("2d");
+
+  // Build datasets only for enabled scenarios
+  const datasets = [];
+
+  // Always include baseline
+  if (data.scenarios.noPV) {
+    datasets.push({
+      label: data.scenarios.noPV.label,
+      data: data.scenarios.noPV.costs,
+      borderColor: "#f44336",
+      backgroundColor: "rgba(244, 67, 54, 0.1)",
+      borderWidth: 3,
+      tension: 0.1,
+    });
+  }
+
+  // Only include PV Only if it exists
+  if (data.scenarios.pvOnly && data.scenarios.pvOnly.enabled) {
+    datasets.push({
+      label: data.scenarios.pvOnly.label,
+      data: data.scenarios.pvOnly.costs,
+      borderColor: "#FF9800",
+      backgroundColor: "rgba(255, 152, 0, 0.1)",
+      borderWidth: 3,
+      tension: 0.1,
+    });
+  }
+
+  // Only include PV+Battery if it exists
+  if (data.scenarios.pvBattery && data.scenarios.pvBattery.enabled) {
+    datasets.push({
+      label: data.scenarios.pvBattery.label,
+      data: data.scenarios.pvBattery.costs,
+      borderColor: "#4CAF50",
+      backgroundColor: "rgba(76, 175, 80, 0.1)",
+      borderWidth: 3,
+      tension: 0.1,
+    });
+  }
+
   chartInstances["paybackChart"] = new Chart(ctx, {
     type: "line",
     data: {
       labels: data.years,
-      datasets: [
-        {
-          label: data.scenarios.noPV.label,
-          data: data.scenarios.noPV.costs,
-          borderColor: "#f44336",
-          backgroundColor: "rgba(244, 67, 54, 0.1)",
-          borderWidth: 3,
-          tension: 0.1,
-        },
-        {
-          label: data.scenarios.pvOnly.label,
-          data: data.scenarios.pvOnly.costs,
-          borderColor: "#FF9800",
-          backgroundColor: "rgba(255, 152, 0, 0.1)",
-          borderWidth: 3,
-          tension: 0.1,
-        },
-        {
-          label: data.scenarios.pvBattery.label,
-          data: data.scenarios.pvBattery.costs,
-          borderColor: "#4CAF50",
-          backgroundColor: "rgba(76, 175, 80, 0.1)",
-          borderWidth: 3,
-          tension: 0.1,
-        },
-      ],
+      datasets: datasets,
     },
     options: {
       responsive: true,
@@ -541,27 +556,29 @@ function displayCumulativePaybackChart(data) {
         <div class="summary-grid">
             <div class="summary-card">
                 <h4>PV Only Breakeven</h4>
-                <div class="value">${data.breakeven.pvOnly
-    }<span class="unit">years</span></div>
+                <div class="value">${
+                  data.breakeven.pvOnly
+                }<span class="unit">years</span></div>
             </div>
             <div class="summary-card">
                 <h4>PV + Battery Breakeven</h4>
-                <div class="value">${data.breakeven.pvBattery
-    }<span class="unit">years</span></div>
+                <div class="value">${
+                  data.breakeven.pvBattery
+                }<span class="unit">years</span></div>
             </div>
             <div class="summary-card">
                 <h4>20-Year Savings (PV Only)</h4>
                 <div class="value">€${(
-      data.scenarios.noPV.costs[20] -
-      data.scenarios.pvOnly.costs[20]
-    ).toFixed(0)}</div>
+                  data.scenarios.noPV.costs[20] -
+                  data.scenarios.pvOnly.costs[20]
+                ).toFixed(0)}</div>
             </div>
             <div class="summary-card">
                 <h4>20-Year Savings (PV+Battery)</h4>
                 <div class="value">€${(
-      data.scenarios.noPV.costs[20] -
-      data.scenarios.pvBattery.costs[20]
-    ).toFixed(0)}</div>
+                  data.scenarios.noPV.costs[20] -
+                  data.scenarios.pvBattery.costs[20]
+                ).toFixed(0)}</div>
             </div>
         </div>
     `;
@@ -575,9 +592,11 @@ function displaySummaryReport(data) {
 
   const reportDiv = document.createElement("div");
   reportDiv.className = "chart-container";
-  reportDiv.innerHTML = `
-        <h3>Detailed Scenario Comparison Report</h3>
-        
+
+  let htmlContent = `<h3>Detailed Scenario Comparison Report</h3>`;
+
+  // Always show baseline
+  htmlContent += `
         <h4 style="margin-top: 20px; color: #f44336;">Scenario 1: No PV System</h4>
         <table>
             <tr>
@@ -597,7 +616,11 @@ function displaySummaryReport(data) {
                 <td>${data.scenarios.noPV.gridDependency.toFixed(1)}%</td>
             </tr>
         </table>
-        
+  `;
+
+  // Only show PV Only if enabled
+  if (data.scenarios.pvOnly && data.scenarios.pvOnly.enabled) {
+    htmlContent += `
         <h4 style="margin-top: 20px; color: #FF9800;">Scenario 2: PV Only</h4>
         <table>
             <tr>
@@ -631,19 +654,24 @@ function displaySummaryReport(data) {
             <tr style="background-color: #e8f5e9;">
                 <td><strong>20-Year Savings vs No PV:</strong></td>
                 <td><strong>€${(
-      data.scenarios.noPV.twentyYearCost -
-      data.scenarios.pvOnly.twentyYearCost
-    ).toFixed(0)}</strong></td>
+                  data.scenarios.noPV.twentyYearCost -
+                  data.scenarios.pvOnly.twentyYearCost
+                ).toFixed(0)}</strong></td>
             </tr>
         </table>
-        
+    `;
+  }
+
+  // Only show PV+Battery if enabled
+  if (data.scenarios.pvBattery && data.scenarios.pvBattery.enabled) {
+    htmlContent += `
         <h4 style="margin-top: 20px; color: #4CAF50;">Scenario 3: PV + Battery</h4>
         <table>
             <tr>
                 <td><strong>Initial Investment:</strong></td>
                 <td>€${data.scenarios.pvBattery.initialInvestment.toFixed(
-      0
-    )}</td>
+                  0
+                )}</td>
             </tr>
             <tr>
                 <td><strong>Annual Cost:</strong></td>
@@ -652,8 +680,8 @@ function displaySummaryReport(data) {
             <tr>
                 <td><strong>Annual Savings:</strong></td>
                 <td>€${data.scenarios.pvBattery.annualSavings.toFixed(
-      2
-    )}/year</td>
+                  2
+                )}/year</td>
             </tr>
             <tr>
                 <td><strong>20-Year Total Cost:</strong></td>
@@ -674,41 +702,61 @@ function displaySummaryReport(data) {
             <tr style="background-color: #e8f5e9;">
                 <td><strong>20-Year Savings vs No PV:</strong></td>
                 <td><strong>€${(
-      data.scenarios.noPV.twentyYearCost -
-      data.scenarios.pvBattery.twentyYearCost
-    ).toFixed(0)}</strong></td>
-            </tr>
+                  data.scenarios.noPV.twentyYearCost -
+                  data.scenarios.pvBattery.twentyYearCost
+                ).toFixed(0)}</strong></td>
+            </tr>`;
+
+    // Only show comparison with PV Only if it also exists
+    if (data.scenarios.pvOnly && data.scenarios.pvOnly.enabled) {
+      htmlContent += `
             <tr style="background-color: #fff3e0;">
                 <td><strong>Additional Savings vs PV Only:</strong></td>
                 <td><strong>€${(
-      data.scenarios.pvOnly.twentyYearCost -
-      data.scenarios.pvBattery.twentyYearCost
-    ).toFixed(0)}</strong></td>
-            </tr>
+                  data.scenarios.pvOnly.twentyYearCost -
+                  data.scenarios.pvBattery.twentyYearCost
+                ).toFixed(0)}</strong></td>
+            </tr>`;
+    }
+
+    htmlContent += `
         </table>
         
         <h4 style="margin-top: 20px;">Recommendation</h4>
-        <div class="info-box ${data.scenarios.pvBattery.breakeven < 15 ? "success" : "info"
-    }">
-            <p><strong>${data.scenarios.pvBattery.breakeven < 15
-      ? "✅ Highly Recommended"
-      : "💡 Consider Carefully"
-    }</strong></p>
+        <div class="info-box ${
+          data.scenarios.pvBattery.breakeven < 15 ? "success" : "info"
+        }">
+            <p><strong>${
+              data.scenarios.pvBattery.breakeven < 15
+                ? "✅ Highly Recommended"
+                : "💡 Consider Carefully"
+            }</strong></p>
             <p>
-                ${data.scenarios.pvBattery.breakeven < 15
-      ? `With a breakeven period of ${data.scenarios.pvBattery.breakeven
-      } years, the PV+Battery system is financially attractive. 
+                ${
+                  data.scenarios.pvBattery.breakeven < 15
+                    ? `With a breakeven period of ${
+                        data.scenarios.pvBattery.breakeven
+                      } years, the PV+Battery system is financially attractive. 
                        You'll achieve ${data.scenarios.pvBattery.selfSufficiency.toFixed(
-        0
-      )}% self-sufficiency and save 
+                         0
+                       )}% self-sufficiency and save 
                        €${data.scenarios.pvBattery.annualSavings.toFixed(
-        0
-      )}/year.`
-      : `The breakeven period of ${data.scenarios.pvBattery.breakeven} years is relatively long. Consider starting with PV only 
-                       (${data.scenarios.pvOnly.breakeven} year breakeven) and adding battery storage later when prices decrease.`
-    }
+                         0
+                       )}/year.`
+                    : `The breakeven period of ${
+                        data.scenarios.pvBattery.breakeven
+                      } years is relatively long. Consider starting with PV only 
+                       (${
+                         data.scenarios.pvOnly
+                           ? data.scenarios.pvOnly.breakeven
+                           : "N/A"
+                       } year breakeven) and adding battery storage later when prices decrease.`
+                }
             </p>
         </div>
     `;
+  }
+
+  reportDiv.innerHTML = htmlContent;
   container.appendChild(reportDiv);
 }
